@@ -2,3 +2,5 @@ pandas
 scikit-learn
 joblib
 numpy
+Flask
+google-genai

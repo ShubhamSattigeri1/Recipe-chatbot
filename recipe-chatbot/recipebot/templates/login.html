@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f8f8f6">
+    <title>Sign in — Nosh</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: { ink: "#242923", sage: "#49624f", paper: "#f8f8f6", line: "#e7e8e2" }
+          }
+        }
+      };
+    </script>
+  </head>
+  <body class="grid min-h-screen place-items-center bg-paper px-4 text-ink antialiased">
+    <main class="w-full max-w-sm">
+      <a href="/login" class="mb-8 flex items-center justify-center gap-3" aria-label="Nosh sign in">
+        <span class="grid h-10 w-10 place-items-center rounded-xl bg-sage text-lg font-semibold text-white">n</span>
+        <span>
+          <span class="block text-base font-semibold tracking-tight">nosh</span>
+          <span class="block text-xs text-stone-500">your everyday recipe finder</span>
+        </span>
+      </a>
+      <section class="rounded-2xl border border-line bg-white p-6 shadow-sm sm:p-8">
+        <h1 class="text-xl font-semibold tracking-tight">Welcome back</h1>
+        <p class="mt-1 text-sm text-stone-500">Sign in to find something delicious.</p>
+        {% if error %}
+        <p role="alert" class="mt-5 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">{{ error }}</p>
+        {% endif %}
+        <form method="post" class="mt-6 space-y-4">
+          <div>
+            <label for="login_id" class="mb-1.5 block text-sm font-medium">Login ID</label>
+            <input id="login_id" name="login_id" type="text" autocomplete="username" required autofocus
+                   class="w-full rounded-xl border border-line bg-paper px-3.5 py-3 text-sm outline-none transition focus:border-sage focus:ring-4 focus:ring-sage/10">
+          </div>
+          <div>
+            <label for="password" class="mb-1.5 block text-sm font-medium">Password</label>
+            <input id="password" name="password" type="password" autocomplete="current-password" required
+                   class="w-full rounded-xl border border-line bg-paper px-3.5 py-3 text-sm outline-none transition focus:border-sage focus:ring-4 focus:ring-sage/10">
+          </div>
+          <button type="submit" class="w-full rounded-xl bg-sage px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#3b5141]">
+            Sign in
+          </button>
+        </form>
+      </section>
+    </main>
+  </body>
+</html>

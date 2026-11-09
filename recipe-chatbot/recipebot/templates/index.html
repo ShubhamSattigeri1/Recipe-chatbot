@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f8f8f6">
+    <meta name="description" content="Find recipes that fit what you have and how you eat.">
+    <title>Nosh — recipe finder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              ink: "#242923",
+              sage: "#49624f",
+              paper: "#f8f8f6",
+              line: "#e7e8e2"
+            },
+            fontFamily: {
+              sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"]
+            }
+          }
+        }
+      };
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      html { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; }
+      #messages { scrollbar-width: thin; scrollbar-color: #d7d9d2 transparent; }
+    </style>
+  </head>
+  <body class="min-h-screen bg-paper text-ink antialiased">
+    <div class="mx-auto flex min-h-screen max-w-5xl flex-col px-4 sm:px-8">
+      <header class="flex h-[76px] items-center justify-between border-b border-line">
+        <a href="/" class="flex items-center gap-3" aria-label="Nosh home">
+          <span class="grid h-10 w-10 place-items-center rounded-xl bg-sage text-white">
+            <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5" aria-hidden="true">
+              <path d="M7 3v7m4-7v7M9 10v11m8-18v18m0-18c2 2 3 4.5 3 7h-3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+          <span>
+            <span class="block text-base font-semibold tracking-tight">nosh</span>
+            <span class="block text-xs text-stone-500">your everyday recipe finder</span>
+          </span>
+        </a>
+        <div class="flex items-center gap-3">
+          <span class="hidden items-center gap-2 rounded-full border border-line bg-white px-3 py-1.5 text-xs font-medium text-stone-600 sm:flex">
+            <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+            {% if gemini_enabled %}Conversation assistant ready{% else %}Recipe collection ready{% endif %}
+          </span>
+          <form action="/logout" method="post">
+            <button type="submit" class="rounded-lg px-3 py-2 text-sm font-medium text-stone-500 transition hover:bg-white hover:text-ink">Sign out</button>
+          </form>
+        </div>
+      </header>
+
+      <main class="flex flex-1 flex-col py-8 sm:py-12">
+        <section class="mx-auto mb-8 w-full max-w-3xl text-center sm:mb-10">
+          <p class="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-sage">A little inspiration for dinner</p>
+          <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl">What sounds good today?</h1>
+          <p class="mx-auto mt-3 max-w-xl text-sm leading-6 text-stone-500 sm:text-base">
+            Find something delicious with the ingredients you have, or tell me what you'd like to avoid.
+          </p>
+        </section>
+
+        <section id="messages" class="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-5 overflow-y-auto pb-5" aria-live="polite" aria-label="Conversation">
+          <article class="flex items-start gap-3">
+            <span class="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-sage text-white" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" class="h-4 w-4"><path d="M7 3v7m4-7v7M9 10v11m8-18v18m0-18c2 2 3 4.5 3 7h-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            <div class="max-w-[90%] rounded-2xl rounded-tl-md border border-line bg-white px-4 py-3.5 text-sm leading-6 text-stone-700 shadow-sm">
+              Hi, I'm Nosh. What are you in the mood for? Tell me what ingredients you have, or let me know if there's anything you'd like to avoid.
+            </div>
+          </article>
+        </section>
+
+        <section class="mx-auto w-full max-w-3xl">
+          <div id="suggestions" class="mb-3 flex flex-wrap justify-center gap-2">
+            <button type="button" class="suggestion rounded-full border border-line bg-white px-3.5 py-2 text-xs font-medium text-stone-600 transition hover:border-sage hover:text-sage">Find a pasta recipe</button>
+            <button type="button" class="suggestion rounded-full border border-line bg-white px-3.5 py-2 text-xs font-medium text-stone-600 transition hover:border-sage hover:text-sage">I have chicken and rice</button>
+            <button type="button" class="suggestion rounded-full border border-line bg-white px-3.5 py-2 text-xs font-medium text-stone-600 transition hover:border-sage hover:text-sage">Show me dairy-free meals</button>
+          </div>
+          <form id="chat-form" class="flex items-end gap-3 rounded-2xl border border-line bg-white p-2.5 shadow-sm transition focus-within:border-sage/50 focus-within:ring-4 focus-within:ring-sage/5">
+            <label for="message" class="sr-only">Your message</label>
+            <textarea id="message" rows="1" maxlength="1000" placeholder="Ask for a recipe or tell me what you have..." class="max-h-32 min-h-11 flex-1 resize-none bg-transparent px-2.5 py-3 text-sm text-ink outline-none placeholder:text-stone-400" required></textarea>
+            <button id="send" type="submit" class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-sage text-white transition hover:bg-[#3b5141] disabled:cursor-not-allowed disabled:opacity-50" aria-label="Send message">
+              <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5" aria-hidden="true"><path d="M5 12h14m-7-7 7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </form>
+          <p class="mt-3 text-center text-xs text-stone-400">Results come from the recipe collection. Always verify ingredients for your needs.</p>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      const form = document.querySelector("#chat-form");
+      const input = document.querySelector("#message");
+      const send = document.querySelector("#send");
+      const messages = document.querySelector("#messages");
+      const suggestions = document.querySelector("#suggestions");
+
+      function addMessage(text, sender) {
+        const row = document.createElement("article");
+        row.className = sender === "user"
+          ? "flex justify-end"
+          : "flex items-start gap-3";
+        const bubble = document.createElement("div");
+        bubble.className = sender === "user"
+          ? "max-w-[90%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-sage px-4 py-3.5 text-sm leading-6 text-white"
+          : "max-w-[90%] whitespace-pre-wrap rounded-2xl rounded-tl-md border border-line bg-white px-4 py-3.5 text-sm leading-6 text-stone-700 shadow-sm";
+        bubble.textContent = text;
+        if (sender !== "user") {
+          const icon = document.createElement("span");
+          icon.className = "mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-sage text-xs font-semibold text-white";
+          icon.textContent = "N";
+          icon.setAttribute("aria-hidden", "true");
+          row.append(icon);
+        }
+        row.append(bubble);
+        messages.append(row);
+        messages.scrollTop = messages.scrollHeight;
+      }
+
+      async function sendMessage(message) {
+        if (!message || send.disabled) return;
+        addMessage(message, "user");
+        input.value = "";
+        input.style.height = "auto";
+        send.disabled = true;
+        send.setAttribute("aria-busy", "true");
+        try {
+          const response = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message })
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Something went wrong. Please try again.");
+          addMessage(data.reply, "assistant");
+        } catch (error) {
+          addMessage(error.message || "Unable to connect. Please try again.", "assistant");
+        } finally {
+          send.disabled = false;
+          send.removeAttribute("aria-busy");
+          input.focus();
+        }
+      }
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        sendMessage(input.value.trim());
+      });
+      input.addEventListener("input", () => {
+        input.style.height = "auto";
+        input.style.height = `${Math.min(input.scrollHeight, 128)}px`;
+      });
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          form.requestSubmit();
+        }
+      });
+      suggestions.addEventListener("click", (event) => {
+        const button = event.target.closest(".suggestion");
+        if (button) sendMessage(button.textContent.trim());
+      });
+    </script>
+  </body>
+</html>

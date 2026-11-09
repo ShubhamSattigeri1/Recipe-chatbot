@@ -1,0 +1,4 @@
+recipe-chatbot/data/recipes.pkl filter=lfs diff=lfs merge=lfs -text
+recipe-chatbot/data/*.joblib filter=lfs diff=lfs merge=lfs -text
+recipe-chatbot/data/*.json filter=lfs diff=lfs merge=lfs -text
+*.zip filter=lfs diff=lfs merge=lfs -text

@@ -97,22 +97,20 @@ Ingredient-based matching reports matched ingredients and ingredients to add. Th
 
 Substitution suggestions use similar recipes, ingredient-role heuristics, and evidence levels. Suggestions are not guaranteed to work in every recipe; replacement amounts and results may need testing.
 
-### Worked technical trace: searching for "saffon rice"
+### Worked technical trace: searching for "saffron rice"
 
-This example traces the actual request through the current implementation. The user misspells **saffron** as **saffon**.
+This example traces the actual request through the current implementation. The user searches for **saffron rice**.
 
-1. **The browser submits the message.** The chat page sends `{"message": "Find saffon rice recipes"}` as JSON to `POST /api/chat`. Flask first checks that the browser is logged in and that the message is a non-empty string no longer than 1,000 characters.
+1. **The browser submits the message.** The chat page sends `{"message": "Find saffron rice recipes"}` as JSON to `POST /api/chat`. Flask first checks that the browser is logged in and that the message is a non-empty string no longer than 1,000 characters.
 2. **The server retrieves the conversation state.** Flask uses the conversation ID in the signed session cookie to retrieve (or create) a `recipebot.session.Session`. That object already references the loaded recipe DataFrame and search index.
 3. **The session parser identifies a search.** `Session.handle()` lowercases and trims the text. It checks for reset commands, recipe-number selection, substitution requests, ingredient exclusions/inclusions, and "I have ..." inventory messages. This sentence matches none of those special cases, but starts with the recognized search verb `Find`, so it is handled as a normal recipe search.
-4. **The query is cleaned.** `_clean_query()` removes the leading `Find` and trailing `recipes`, leaving the exact search string `saffon rice`. This step does **not** spell-correct search queries. The parser's fuzzy matching applies only to recognized dietary restriction group names, not dish searches.
-5. **The search string becomes a TF-IDF query vector.** `search()` passes the lowercase text to the fitted scikit-learn `TfidfVectorizer`. In this example, `rice` is in the index vocabulary but the misspelled `saffon` is not, so the unknown term contributes no feature. The effective searchable part is therefore mostly `rice`.
+4. **The query is cleaned.** `_clean_query()` removes the leading `Find` and trailing `recipes`, leaving the exact search string `saffron rice`. This step does **not** spell-correct search queries. The parser's fuzzy matching applies only to recognized dietary restriction group names, not dish searches.
+5. **The search string becomes a TF-IDF query vector.** `search()` passes the lowercase text to the fitted scikit-learn `TfidfVectorizer`. In this example, both `saffron` and `rice` are present in the index vocabulary, so the query contributes meaningful features for both words.
 6. **Recipes are ranked and filtered.** The vectorizer transforms the query into a sparse vector. The search code multiplies the precomputed sparse recipe matrix by that query vector, sorts recipe scores from highest to lowest, and examines candidates in batches of 2,000 (up to 60,000 positive-score candidates). There are no include/exclude filters in this example, so the candidates are not removed by dietary constraints. The first five matches are returned.
 7. **The server formats a friendly answer.** Each result includes a title, step count, and up to three ingredient lines whose text matches query tokens. The browser receives a JSON `reply`; it displays that text without exposing internal recipe IDs or ranking scores.
 8. **A follow-up can open a result.** If the user replies `recipe 1`, the session maps that position in its saved `last_results` back to the recipe row, then returns the recipe's ingredient list and instructions.
 
-**Observed example output:** using the current local recipe data and TF-IDF cache, the misspelled query returned `QA`, `Wok Made Rice`, `Rice`, `QATest2`, and `White Rice`. Internally, the top scores were approximately 0.52, 0.40, 0.35, 0.35, and 0.31. Those scores measure text similarity; they are not probabilities that the recipe is a good match. The odd `QA` and `QATest2` titles are present in the source dataset.
-
-With the correctly spelled query **"Find saffron rice recipes"**, the same index returned saffron-specific results, including `Indian Saffron Rice`, `Saffron Rice`, and `Saffron Rice with Currants`. This demonstrates why the misspelling matters: TF-IDF is lexical search, not semantic search or automatic typo correction. A future improvement could add spelling correction or a semantic retrieval layer, while retaining the current hard ingredient filters.
+**Observed example output:** using the current local recipe data and TF-IDF cache, the correctly spelled query returned saffron-specific matches such as `Indian Saffron Rice`, `Saffron Rice`, and `Saffron Rice with Currants`. The top scores reflect how strongly each recipe text matches the query terms; they are not probabilities that the recipe is a good match. This example illustrates the intended behavior of the recipe search: exact keyword terms such as `saffron` and `rice` drive retrieval, while filtering remains separate from ranking.
 
 ### Main files
 

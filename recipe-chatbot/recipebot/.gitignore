@@ -26,3 +26,5 @@ Thumbs.db
 *.onnx
 *.h5
 *.pkl
+
+venv/

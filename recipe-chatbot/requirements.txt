@@ -3,4 +3,5 @@ scikit-learn
 joblib
 numpy
 Flask
-google-genai
+gunicorn
+sentence-transformers

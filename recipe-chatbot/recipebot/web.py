@@ -23,6 +23,8 @@ def format_web_reply(out):
     action = out["action"]
     if action == "reset":
         return "All set — I cleared your search and dietary filters. What would you like to find?"
+    if action == "help":
+        return out["message"]
     if action == "ask":
         parts = [out.get("using_recipe"), out["message"]]
         return "\n".join(part for part in parts if part)
@@ -32,16 +34,23 @@ def format_web_reply(out):
         return "\n\n".join(lines)
     if action == "details":
         recipe = out["recipe"]
+        steps = recipe.get("steps") or [
+            line.strip() for line in recipe.get("instructions", "").splitlines() if line.strip()
+        ]
         lines = [
-            f"{recipe['title']}",
-            f"Ingredients ({len(recipe['ingredients'])}):",
+            f"{recipe['title']} [{recipe['id']}]",
+            f"Ingredients ({len(recipe['ingredients'])}, original dataset lines):",
             *[f"• {ingredient}" for ingredient in recipe["ingredients"]],
             "Instructions:",
-            recipe["instructions"] or "No instructions are available for this recipe.",
+            "Steps are numbered by non-empty original instruction line.",
+            *[f"{number}. {step}" for number, step in enumerate(steps, 1)],
         ]
+        if not steps:
+            lines.append("No instructions are available for this recipe.")
         return "\n".join(lines)
     if action == "search":
         lines = list(out.get("warnings", []))
+        lines.extend(out.get("interpreting", []))
         query = out["query"]
         results = out["results"]
         if not results:
@@ -56,7 +65,8 @@ def format_web_reply(out):
             f'for "{query}". Here are a few ideas:'
         )
         for number, recipe in enumerate(results, 1):
-            lines.append(f"{number}. {recipe['title']} — {recipe['n_steps']} steps")
+            step_label = "step" if recipe["n_steps"] == 1 else "steps"
+            lines.append(f"{number}. {recipe['title']} — {recipe['n_steps']} {step_label}")
             if recipe.get("evidence"):
                 lines.append(f"   Ingredients mentioned: {', '.join(recipe['evidence'])}")
         if out.get("include"):
@@ -78,7 +88,8 @@ def format_web_reply(out):
                 "good places to start:"
             )
             for number, recipe in enumerate(recipes, 1):
-                lines.append(f"{number}. {recipe['title']} — {recipe['n_steps']} steps")
+                step_label = "step" if recipe["n_steps"] == 1 else "steps"
+                lines.append(f"{number}. {recipe['title']} — {recipe['n_steps']} {step_label}")
                 if recipe["matched"]:
                     lines.append(f"   Uses: {', '.join(recipe['matched'])}")
                 if recipe["missing"]:
@@ -153,9 +164,11 @@ def create_app(df=None, index=None, gemini_client=None):
     if df is None:
         df = load_recipes()
     if index is None:
-        index = SearchIndex.load_or_build(df)
+        index = SearchIndex.load_or_build(df, semantic=True, build_semantic=False)
 
     app = Flask(__name__)
+    if index.semantic_notice:
+        app.logger.warning(index.semantic_notice)
     app.secret_key = os.environ.get("FLASK_SECRET_KEY") or secrets.token_hex(32)
     app.config.update(
         SESSION_COOKIE_HTTPONLY=True,
@@ -164,16 +177,19 @@ def create_app(df=None, index=None, gemini_client=None):
     )
     login_id = os.environ.get("RECIPEBOT_LOGIN_ID", "TEST1234")
     login_password = os.environ.get("RECIPEBOT_LOGIN_PASSWORD", "TEST1234")
-    gemini_model = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
+    gemini_model = os.environ.get("GEMINI_MODEL")
     gemini_rewrite_enabled = os.environ.get("GEMINI_REWRITE") == "1"
-    if (
-        gemini_client is None
-        and gemini_rewrite_enabled
-        and os.environ.get("GEMINI_API_KEY")
-    ):
-        from google import genai
+    if gemini_client is None and gemini_rewrite_enabled:
+        from .llm import Gemini
 
-        gemini_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+        model_config = Gemini()
+        if model_config.available:
+            from google import genai
+
+            gemini_client = genai.Client(api_key=model_config.key)
+            gemini_model = model_config.model
+        else:
+            logger.warning(model_config.configuration_notice or "Gemini is unavailable; using local replies.")
     sessions = {}
     sessions_lock = RLock()
 

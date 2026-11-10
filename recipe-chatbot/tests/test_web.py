@@ -68,7 +68,7 @@ class WebInterfaceTests(unittest.TestCase):
         self.assertEqual(first.status_code, 200)
         self.assertIn("Creamy Chicken Rice", first.json["reply"])
         self.assertIn("I found", first.json["reply"])
-        self.assertIn("steps", first.json["reply"])
+        self.assertIn("— 1 step", first.json["reply"])
         self.assertNotIn("score", first.json["reply"])
         self.assertNotIn("test_chicken", first.json["reply"])
         self.assertNotIn("[", first.json["reply"])
@@ -81,9 +81,16 @@ class WebInterfaceTests(unittest.TestCase):
         response = self.client.post("/api/chat", json={"message": "recipe 1"})
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Ingredients (3)", response.json["reply"])
+        self.assertIn("Ingredients (3, original dataset lines)", response.json["reply"])
         self.assertIn("Instructions:", response.json["reply"])
+        self.assertIn("1. Cook the chicken and rice.", response.json["reply"])
         self.assertIn("Cook the chicken and rice.", response.json["reply"])
+
+    def test_help_is_fixed_and_does_not_run_a_recipe_search(self):
+        response = self.client.post("/api/chat", json={"message": "what all can you make"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("I can help you find recipes", response.json["reply"])
+        self.assertNotIn("Simple Chicken Rice", response.json["reply"])
 
     def test_ingredient_match_is_explained_in_plain_language(self):
         response = self.client.post("/api/chat", json={"message": "I have chicken and rice"})

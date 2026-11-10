@@ -4,6 +4,7 @@ import json
 import pandas as pd
 import google.generativeai as genai
 from .substitute import substitute, format_substitution
+from .llm import Gemini
 
 recipe_tools = [
     {
@@ -53,9 +54,10 @@ class RecipeRouter:
         self.active_includes: list[str] = []
         self.active_excludes: list[str] = []
         
-        key = api_key or os.environ.get("GEMINI_API_KEY")
-        if not key:
-            raise ValueError("GEMINI_API_KEY environment variable is not set.")
+        config = Gemini(api_key=api_key)
+        if not config.available:
+            raise ValueError(config.configuration_notice or "Gemini model or API key is unavailable.")
+        key = config.key
         
         genai.configure(api_key=key)
         
@@ -66,7 +68,7 @@ class RecipeRouter:
         }
 
         self.model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
+            model_name=config.model,
             tools=recipe_tools,
             system_instruction=(
                 "You are an expert, warm, and conversational culinary assistant backed strictly by a local recipe dataset. "

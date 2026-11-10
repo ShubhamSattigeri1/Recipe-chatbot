@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 """Step 2a: retrieval = hybrid TF-IDF/semantic ranking + HARD ingredient constraints.
 
 Design
@@ -5,26 +6,41 @@ Design
   The dense index is cached separately from data/tfidf.joblib.
 - Hard constraints (include / exclude) are applied with hard_filter() below, never as soft scores.
   Candidates are scanned in hybrid relevance order, in chunks, and only recipes that PASS the filter
+=======
+"""Step 2a: retrieval = TF-IDF ranking + HARD ingredient constraints.
+
+Design
+- Index: TF-IDF over (title x2 + ingredient lines). Built once, cached to data/tfidf.joblib.
+- Hard constraints (include / exclude) are applied with hard_filter() below, never as soft scores.
+  Candidates are scanned in descending TF-IDF order, in chunks, and only recipes that PASS the filter
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
   are returned, so a constraint can never be silently relaxed.
 - Exclusion groups ("dairy", "nuts") expand to a keyword list. This is a heuristic list, not a
   medical guarantee, and the result says so.
 - Search returns only the top-k; aggregates must use analytics.* on the full filtered set.
 """
+<<<<<<< HEAD
 import hashlib
 import os
 import re
 import difflib
+=======
+import re
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 from pathlib import Path
 
 import joblib
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 
+<<<<<<< HEAD
 try:
     from rapidfuzz import fuzz, process
 except ImportError:
     fuzz = process = None
 
+=======
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 
 # Compounds that refer to different foods are stripped for both ingredient matching
 # and exclusions. Derivatives are stripped only when matching what the user has.
@@ -107,8 +123,11 @@ def hard_filter(df, include, exclude):
     return m
 
 INDEX_PATH = Path(__file__).resolve().parent.parent / "data" / "tfidf.joblib"
+<<<<<<< HEAD
 VOCABULARY_PATH = INDEX_PATH.with_name("recipe_vocabulary.joblib")
 DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+=======
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 
 GROUPS = {
     "dairy": ["milk", "cream", "butter", "cheese", "yogurt", "yoghurt", "ghee", "whey", "casein",
@@ -117,8 +136,11 @@ GROUPS = {
     "nuts": ["almond", "walnut", "pecan", "cashew", "pistachio", "hazelnut", "peanut", "macadamia", "pine nut"],
 }
 _STOP = {"recipe", "recipes", "find", "show", "with", "for", "the", "and", "some", "any", "dish", "me", "a", "an", "of"}
+<<<<<<< HEAD
 _UNSPLIT_COMPOUNDS = {"cheesecake", "pancakes"}
 _SPLIT_COMPOUNDS = {"icecream": ("ice", "cream")}
+=======
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 
 
 def expand_terms(terms):
@@ -131,6 +153,7 @@ def expand_terms(terms):
     return out
 
 
+<<<<<<< HEAD
 def _correct_token(token, vocabulary):
     if token in _SPLIT_COMPOUNDS:
         return list(_SPLIT_COMPOUNDS[token])
@@ -185,12 +208,18 @@ class SearchIndex:
         self.semantic_encoder = semantic_encoder
         self.semantic_model_name = semantic_model_name
         self.semantic_notice = semantic_notice
+=======
+class SearchIndex:
+    def __init__(self, vec, X):
+        self.vec, self.X = vec, X
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 
     @staticmethod
     def _docs(df):
         return (df["title"].str.lower() + " ") * 2 + df["ing_text"].str.replace("\n", " ", regex=False)
 
     @classmethod
+<<<<<<< HEAD
     def load_or_build(
         cls, df, path=INDEX_PATH, rebuild=False, semantic=False,
         semantic_encoder=None, semantic_model_name=None, build_semantic=True,
@@ -318,6 +347,21 @@ class SearchIndex:
             for doc in docs
             for token in re.findall(r"[a-z]+", doc)
         )
+=======
+    def load_or_build(cls, df, path=INDEX_PATH, rebuild=False):
+        path = Path(path)
+        if path.exists() and not rebuild:
+            vec, X = joblib.load(path)
+            if X.shape[0] == len(df):
+                return cls(vec, X)
+        print("Building TF-IDF index (one-time, a few minutes)...")
+        vec = TfidfVectorizer(token_pattern=r"(?u)\b[a-z][a-z]+\b", stop_words="english", ngram_range=(1, 2),
+                              min_df=3 if len(df) > 1000 else 1, max_features=200_000, sublinear_tf=True, dtype=np.float32)
+        X = vec.fit_transform(cls._docs(df))
+        path.parent.mkdir(exist_ok=True)
+        joblib.dump((vec, X), path)
+        return cls(vec, X)
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 
 
 def evidence_lines(ingredients, tokens, n=3):
@@ -325,6 +369,7 @@ def evidence_lines(ingredients, tokens, n=3):
     return hits[:n]
 
 
+<<<<<<< HEAD
 def reciprocal_rank_fusion(lexical_scores, semantic_scores=None, lexical_weight=0.55,
                            semantic_weight=0.45, rank_constant=60):
     """Combine lexical and semantic rankings without assuming their scores share a scale."""
@@ -377,6 +422,16 @@ def search(df, index, query, include=(), exclude=(), k=5, chunk=2000, max_scan=6
     else:
         order = order[:max_scan]
     tokens = [w for w in re.findall(r"[a-z]{3,}", normalized_query) if w not in _STOP]
+=======
+def search(df, index, query, include=(), exclude=(), k=5, chunk=2000, max_scan=60000):
+    """Returns dict with results (id, title, score, n_steps, evidence) that ALL satisfy the hard constraints."""
+    exc = expand_terms(exclude)
+    inc = [t.lower() for t in include]
+    q = index.vec.transform([query.lower()])
+    scores = (index.X @ q.T).toarray().ravel()
+    order = np.argsort(-scores)[: min(int((scores > 0).sum()), max_scan)]
+    tokens = [w for w in re.findall(r"[a-z]{3,}", query.lower()) if w not in _STOP]
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
     results, scanned = [], 0
     for start in range(0, len(order), chunk):
         pos = order[start:start + chunk]
@@ -385,7 +440,11 @@ def search(df, index, query, include=(), exclude=(), k=5, chunk=2000, max_scan=6
         for p in pos:
             if int(p) in ok:
                 r = df.iloc[p]
+<<<<<<< HEAD
                 results.append({"id": r["id"], "title": r["title"], "score": round(float(ranked_scores[p]), 6),
+=======
+                results.append({"id": r["id"], "title": r["title"], "score": round(float(scores[p]), 4),
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
                                 "n_steps": int(r["n_steps"]), "source": r["source"],
                                 "evidence": evidence_lines(r["ingredients"], tokens + inc)})
                 if len(results) == k:
@@ -393,6 +452,7 @@ def search(df, index, query, include=(), exclude=(), k=5, chunk=2000, max_scan=6
         if len(results) == k:
             break
     note = None
+<<<<<<< HEAD
     if not positive and len(df):
         if dense_scores is not None:
             note = "No query words matched lexically; ranking uses local semantic similarity."
@@ -418,3 +478,13 @@ def search(df, index, query, include=(), exclude=(), k=5, chunk=2000, max_scan=6
             "include": inc, "exclude": list(normalized_exclude), "exclude_expanded": exc,
             "n_scanned": scanned, "results": results, "note": note,
             "retrieval_mode": "hybrid" if dense_scores is not None else "tfidf"}
+=======
+    if not results:
+        note = (f"No recipe among the top {scanned} matches for '{query}' satisfies the constraints "
+                f"(include={inc}, exclude={exc}). Constraints were not relaxed.")
+    elif exc:
+        note = "Exclusion check = none of these keywords appear in the ingredient lines: " + ", ".join(exc) + \
+               ". Heuristic keyword list, not a medical/allergy guarantee."
+    return {"query": query, "include": inc, "exclude": list(exclude), "exclude_expanded": exc,
+            "n_scanned": scanned, "results": results, "note": note}
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd

@@ -11,7 +11,10 @@ Nosh uses recipe text and keyword matching. It is not a nutrition service, and i
 ## Features
 
 - Search recipes by dish name or other words in the recipe titles and ingredients.
+<<<<<<< HEAD
 - Combine TF-IDF keyword ranking with local sentence-embedding ranking once the hybrid index is built.
+=======
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 - Ask for recipes that include an ingredient or exclude an ingredient or ingredient group.
 - Find possible recipes from ingredients you have, and see which ingredients may still be needed.
 - Open a recipe by replying with its number to see its ingredients and instructions.
@@ -44,6 +47,7 @@ cd "C:\Users\Admin\OneDrive\Desktop\Shubham\Nosh_Robotics_Task\recipe-chatbot"
 
 Open **http://127.0.0.1:5000** and sign in with the demo credentials above. Leave the PowerShell window open while using Nosh; press **Ctrl+C** in that window to stop the server.
 
+<<<<<<< HEAD
 The server binds to `127.0.0.1`, which makes it available on the same computer. On its first run, Nosh may take longer to build its TF-IDF index, which is cached in `data/tfidf.joblib`. The server does not build the much larger semantic index during startup; use the one-time build command below to enable hybrid ranking.
 
 ### Run the command-line chatbot
@@ -71,6 +75,25 @@ The CLI uses Gemini only to choose a tool; recipe facts and substitutions are re
 Copy `recipe-chatbot/.env.example` to `recipe-chatbot/recipebot/.env` and set your key locally, or use environment variables. `.env` is not a place to store a key in tracked source; do not commit it, paste it into chat, or include it in screenshots. To list available model IDs, run `python -m recipebot.cli --list-models`. With a key configured, you can explicitly select a model by setting `GEMINI_MODEL`; a leading `models/` is optional.
 
 The browser app's Gemini reply rewriting remains opt-in via `GEMINI_REWRITE=1`; it uses the same configured/discovered model and adds network latency. Without it, web replies remain local. The API key stays server-side.
+=======
+The server binds to `127.0.0.1`, which makes it available on the same computer. On its first run, Nosh may take longer to load or build its recipe search index. The index is cached in `data/tfidf.joblib` for subsequent starts.
+
+### Optional Google Gemini replies
+
+Gemini rewriting is disabled unless `GEMINI_REWRITE` is set to `1`. To enable it for a PowerShell session:
+
+```powershell
+$env:GEMINI_API_KEY = "your-Google-AI-Studio-key"
+$env:GEMINI_REWRITE = "1"
+..\venv\Scripts\python.exe -m recipebot.web
+```
+
+The default model is `gemini-3.8-flash`. You can override it with `GEMINI_MODEL`. When enabled, each reply is sent to Google for rewriting, so replies depend on network availability and may take longer. If the Gemini request fails, Nosh reports an error instead of returning the unrevised reply.
+
+The API key is read by the server from the `GEMINI_API_KEY` environment variable; it is not sent to the browser. Do not put an API key in source code, commit it, or share it in screenshots or messages. Setting the key alone does not enable Gemini.
+
+The app does not automatically load `.env` files. If your key is stored there, load it into the PowerShell environment before starting the server.
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 
 Other optional server settings:
 
@@ -81,9 +104,14 @@ Other optional server settings:
 | `FLASK_SECRET_KEY` | Set a stable Flask session-signing key | Random value generated at startup |
 | `FLASK_COOKIE_SECURE` | Set to `1` to mark session cookies secure when using HTTPS | Disabled |
 | `GEMINI_REWRITE` | Set to `1` to enable Gemini reply rewriting | Disabled |
+<<<<<<< HEAD
 | `GEMINI_API_KEY` | Google Gemini API key; also accepts `GOOGLE_API_KEY` | Not set |
 | `GOOGLE_API_KEY` | Alternate Google Gemini API key variable | Not set |
 | `GEMINI_MODEL` | Optional valid Gemini model name; discovered when omitted | Not set |
+=======
+| `GEMINI_API_KEY` | Google Gemini API key; required for Gemini rewriting | Not set |
+| `GEMINI_MODEL` | Gemini model name | `gemini-3.8-flash` |
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 
 If `FLASK_SECRET_KEY` is not set, a new key is generated at each startup. Existing browser sessions will need to sign in again after restarting.
 
@@ -103,14 +131,19 @@ The API accepts JSON in the form `{"message": "..."}`. Empty messages and messag
 
 `recipebot.data.load_recipes()` loads the three recipe JSON collections in `data/` into a pandas DataFrame. It removes advertisement-only ingredient artifacts and drops entries without a title, ingredients, or instructions. The prepared DataFrame is cached as `data/recipes.pkl`.
 
+<<<<<<< HEAD
 `recipebot.search.SearchIndex` builds or loads a TF-IDF index from recipe titles and ingredient text plus a local dense sentence-embedding index (`sentence-transformers/all-MiniLM-L6-v2`). Retrieval combines the two rankings with weighted reciprocal-rank fusion (55% TF-IDF, 45% semantic), so exact ingredient/title overlap remains important while semantically related wording can also contribute. Lexical weight is applied only to recipes with actual TF-IDF matches, so a zero-match query is ranked by semantic similarity instead of arbitrary dataset order. Both indexes are local and cached (`data/tfidf.joblib` and `data/tfidf.semantic.joblib`). Build the dense corpus cache explicitly with `python -m recipebot.cli --build-hybrid-index` to avoid delaying ordinary app startup; later starts load the cached vectors and embed queries locally. Set `RECIPEBOT_EMBEDDING_MODEL` to another locally supported Sentence Transformers model if needed. If the optional embedding package or model is unavailable, the application reports the fallback and continues with TF-IDF.
 
 Ingredient inclusions and exclusions are still enforced as hard filters after ranking; semantic similarity cannot bypass a requested restriction. The vector model ranks recipes but does not generate recipe facts or alter original ingredient strings.
+=======
+`recipebot.search.SearchIndex` builds or loads a TF-IDF index from recipe titles and ingredient text. Search results are ranked by text similarity, while requested ingredient inclusions and exclusions are applied as hard filters. The index is cached in `data/tfidf.joblib`.
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 
 Ingredient-based matching reports matched ingredients and ingredients to add. The matching code treats salt and water as assumed pantry staples by default. Ingredient quantities are not generally verified.
 
 Substitution suggestions use similar recipes, ingredient-role heuristics, and evidence levels. Suggestions are not guaranteed to work in every recipe; replacement amounts and results may need testing.
 
+<<<<<<< HEAD
 ### Worked technical trace: CLI search for "saffron rice"
 
 This example traces the actual request through the current implementation. The user searches for **saffron rice**.
@@ -123,6 +156,22 @@ This example traces the actual request through the current implementation. The u
 7. **The CLI formats a grounded answer.** Each result has a title, step count, and up to three original ingredient lines matching query tokens. A follow-up such as `recipe 1` resolves by displayed position and shows all original ingredient lines and numbered instruction lines.
 
 **Observed example output:** using the local recipe data, the query returns saffron-specific matches such as `Indian Saffron Rice`, `Saffron Rice`, and `Saffron Rice with Currants`. The CLI uses the hybrid index when the local embedding dependency/model is available; otherwise its startup message identifies the TF-IDF fallback. Combined ranking is for retrieval, not a probability or measure of cooking quality.
+=======
+### Worked technical trace: searching for "saffron rice"
+
+This example traces the actual request through the current implementation. The user searches for **saffron rice**.
+
+1. **The browser submits the message.** The chat page sends `{"message": "Find saffron rice recipes"}` as JSON to `POST /api/chat`. Flask first checks that the browser is logged in and that the message is a non-empty string no longer than 1,000 characters.
+2. **The server retrieves the conversation state.** Flask uses the conversation ID in the signed session cookie to retrieve (or create) a `recipebot.session.Session`. That object already references the loaded recipe DataFrame and search index.
+3. **The session parser identifies a search.** `Session.handle()` lowercases and trims the text. It checks for reset commands, recipe-number selection, substitution requests, ingredient exclusions/inclusions, and "I have ..." inventory messages. This sentence matches none of those special cases, but starts with the recognized search verb `Find`, so it is handled as a normal recipe search.
+4. **The query is cleaned.** `_clean_query()` removes the leading `Find` and trailing `recipes`, leaving the exact search string `saffron rice`. This step does **not** spell-correct search queries. The parser's fuzzy matching applies only to recognized dietary restriction group names, not dish searches.
+5. **The search string becomes a TF-IDF query vector.** `search()` passes the lowercase text to the fitted scikit-learn `TfidfVectorizer`. In this example, both `saffron` and `rice` are present in the index vocabulary, so the query contributes meaningful features for both words.
+6. **Recipes are ranked and filtered.** The vectorizer transforms the query into a sparse vector. The search code multiplies the precomputed sparse recipe matrix by that query vector, sorts recipe scores from highest to lowest, and examines candidates in batches of 2,000 (up to 60,000 positive-score candidates). There are no include/exclude filters in this example, so the candidates are not removed by dietary constraints. The first five matches are returned.
+7. **The server formats a friendly answer.** Each result includes a title, step count, and up to three ingredient lines whose text matches query tokens. The browser receives a JSON `reply`; it displays that text without exposing internal recipe IDs or ranking scores.
+8. **A follow-up can open a result.** If the user replies `recipe 1`, the session maps that position in its saved `last_results` back to the recipe row, then returns the recipe's ingredient list and instructions.
+
+**Observed example output:** using the current local recipe data and TF-IDF cache, the correctly spelled query returned saffron-specific matches such as `Indian Saffron Rice`, `Saffron Rice`, and `Saffron Rice with Currants`. The top scores reflect how strongly each recipe text matches the query terms; they are not probabilities that the recipe is a good match. This example illustrates the intended behavior of the recipe search: exact keyword terms such as `saffron` and `rice` drive retrieval, while filtering remains separate from ranking.
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 
 ### Main files
 
@@ -138,7 +187,11 @@ recipe-chatbot/
 │   └── tfidf.joblib
 ├── recipebot/
 │   ├── data.py          # Load and prepare recipe data
+<<<<<<< HEAD
 │   ├── search.py        # Hybrid search and ingredient filters
+=======
+│   ├── search.py        # TF-IDF search and ingredient filters
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 │   ├── match.py         # Match recipes to ingredients on hand
 │   ├── substitute.py    # Evidence-based substitution suggestions
 │   ├── session.py       # Conversation state, parsing, and recipe actions
@@ -151,12 +204,17 @@ recipe-chatbot/
 
 ## Dependencies and interface styling
 
+<<<<<<< HEAD
 Dependencies are listed in `requirements.txt`. Local hybrid retrieval uses Sentence Transformers and its selected PyTorch backend; the initial model download requires network access. Once cached, embedding and retrieval run locally. The Google GenAI SDK is used only when optional web rewriting is enabled.
+=======
+Dependencies are listed in `requirements.txt`: pandas, scikit-learn, joblib, NumPy, Flask, and the Google GenAI SDK. The Google SDK is only used when Gemini rewriting is enabled.
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 
 Tailwind CSS and the DM Sans font are loaded from external CDNs by the templates. Internet access is needed for those hosted styles and fonts; the recipe search itself runs locally.
 
 ## Tests
 
+<<<<<<< HEAD
 From the `recipe-chatbot` directory, run all available test scripts with:
 
 ```powershell
@@ -173,6 +231,15 @@ From the `recipe-chatbot` directory, run all available test scripts with:
 The historical `tests/test_substitute.py` is not present in this checkout; `tests/test_substitute_engine.py` covers the current substitution engine.
 
 The current `test_analytics.py` run has a pre-existing failing assertion: it expects a sentence with three periods to count as three steps, while the repository's `split_steps()` rule counts non-empty original instruction lines. Recipe detail output follows the latter rule; this unrelated behavior was not changed.
+=======
+From the `recipe-chatbot` directory, run the focused web tests with:
+
+```powershell
+..\venv\Scripts\python.exe -m unittest discover -s tests -p test_web.py
+```
+
+The other test scripts are `test_search.py`, `test_match.py`, `test_substitute_engine.py`, `test_substitute.py`, and `test_analytics.py`. Some existing standalone tests may not pass with the current code: `test_analytics.py` has an assertion failure, and `test_substitute.py` imports a `substitute` function that is not present in the current substitution module. These are separate from the web tests.
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 
 ## Limitations and security notes
 

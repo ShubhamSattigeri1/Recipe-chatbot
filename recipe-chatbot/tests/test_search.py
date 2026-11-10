@@ -1,9 +1,14 @@
 """Run: python tests/test_search.py (synthetic data, no download)"""
 import sys, pathlib, tempfile
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+<<<<<<< HEAD
 import numpy as np
 import pandas as pd
 from recipebot.search import SearchIndex, _term_mask, hard_filter, reciprocal_rank_fusion, search
+=======
+import pandas as pd
+from recipebot.search import SearchIndex, search
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 from recipebot.session import Session
 
 def mk(i, title, ings, steps=("a", "b")):
@@ -19,6 +24,7 @@ df = pd.DataFrame([
 ])
 idx = SearchIndex.load_or_build(df, path=pathlib.Path(tempfile.mkdtemp()) / "i.joblib")
 
+<<<<<<< HEAD
 ranks, fused = reciprocal_rank_fusion(
     lexical_scores=[0.0, 0.8, 0.1],
     semantic_scores=[0.95, 0.1, 0.2],
@@ -117,6 +123,10 @@ assert search(df, fallback_index, "penne pasta")["retrieval_mode"] == "tfidf"
 r = search(df, idx, "penne pasta", k=5)
 assert {x["id"] for x in r["results"]} == {"t_1", "t_2", "t_3"}
 assert r["retrieval_mode"] == "tfidf"
+=======
+r = search(df, idx, "penne pasta", k=5)
+assert {x["id"] for x in r["results"]} == {"t_1", "t_2", "t_3"}
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 
 r = search(df, idx, "penne pasta", exclude=["dairy"], k=5)
 ids = {x["id"] for x in r["results"]}
@@ -150,12 +160,19 @@ assert selected["recipe"]["id"] == initial["results"][0]["id"]
 selected_row = df.loc[df["id"] == selected["recipe"]["id"]].iloc[0]
 assert selected["recipe"]["ingredients"] == selected_row["ingredients"]
 assert selected["recipe"]["instructions"] == selected_row["instructions"]
+<<<<<<< HEAD
 assert "Ingredients (original dataset lines):" in format_results(selected)
 assert "Instructions (numbered by non-empty original instruction line):" in format_results(selected)
 assert len(s3.last_results) == len(initial["results"])
 assert s3.handle("show the first one")["recipe"]["id"] == initial["results"][0]["id"]
 assert s3.handle("recipe #2")["recipe"]["id"] == initial["results"][1]["id"]
 assert s3.handle("option 2")["recipe"]["id"] == initial["results"][1]["id"]
+=======
+assert "Ingredients:" in format_results(selected)
+assert "Instructions:" in format_results(selected)
+assert len(s3.last_results) == len(initial["results"])
+assert s3.handle("show the first one")["recipe"]["id"] == initial["results"][0]["id"]
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 updated = s3.handle("I don't have garlic")
 assert updated["query"] == "penne pasta"
 assert "garlic" in updated["exclude"]
@@ -169,6 +186,7 @@ print("multi-turn selection/exclusion tests passed")
 
 # --- regression tests for the bugs found on real data ---
 from recipebot.session import Session, _normalize
+<<<<<<< HEAD
 assert _normalize("a diary") == "diary" and _normalize("dairy-free") == "dairy" and _normalize("the garlic") == "garlic"
 s2 = Session(df, idx)
 o = s2.handle("find penne pasta"); o = s2.handle("i cannot have a diary")
@@ -177,6 +195,14 @@ assert any("Interpreting 'diary' as 'dairy'." in warning for warning in o["warni
 o = s2.handle("also no garlc")
 assert any("Interpreting 'garlc' as 'garlic'." in warning for warning in o["warnings"])
 assert "garlic" in s2.exclude
+=======
+assert _normalize("a diary") == "dairy" and _normalize("dairy-free") == "dairy" and _normalize("the garlic") == "garlic"
+s2 = Session(df, idx)
+o = s2.handle("find penne pasta"); o = s2.handle("i cannot have a diary")
+assert o["exclude"] == ["dairy"] and "t_1" not in {x["id"] for x in o["results"]}
+o = s2.handle("also no garlc")
+assert o["warnings"] and "garlc" in o["warnings"][0] and "garlc" not in s2.exclude
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 import re as _re
 from recipebot.data import _AD
 assert _AD.sub("", "1 cup penne pasta ADVERTISEMENT").strip() == "1 cup penne pasta"

@@ -2,6 +2,7 @@
 Rule-based message parser (no LLM yet); in Step 3 Gemini will produce the same structured fields."""
 import re
 
+<<<<<<< HEAD
 from .search import GROUPS, _term_mask, normalize_term, search, singular
 from .responses import HELP_TEXT
 
@@ -20,6 +21,15 @@ _UNAVAILABLE = re.compile(
     r"|\bno\s+(?P<home_target>[^.?!;]+?)\s+at\s+home\b",
     re.I,
 )
+=======
+import difflib
+
+from .search import GROUPS, _term_mask, search, singular
+
+_EXCL = re.compile(r"(?:\bi\s+)?(?:can\s?not|can't|cant|cannot)\s+(?:have|eat)\s+(?P<a>[^.?!]+)"
+                   r"|(?:\bi\s+)?(?:do\s+not|don['’]t|dont)\s+have\s+(?P<c>[^.?!]+)"
+                   r"|(?:\bno\b|\bwithout\b|\bexclude\b|\bavoid\b|allergic to|do not want|don't want)\s+(?P<b>[^.?!]+)")
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 _INCL = re.compile(r"(?:must (?:have|contain)|include|that (?:has|have|contains?))\s+(?P<a>[^.?!]+)")
 _FILLER = {"i", "also", "and", "but", "please", "sorry", "ok", "okay", "now", "so", "then", "pls"}
 _HAVE = re.compile(r"^(?:i have|i've got|using|with only)\s+(.+)$")
@@ -50,8 +60,12 @@ _ORDINALS = {
 }
 _RESULT_NUMBER = re.compile(
     r"^\s*(?:(?:please\s+)?(?:show|open|select|view|display)\s+)?"
+<<<<<<< HEAD
     r"(?:the\s+)?(?:(?:recipe|result|option|number)\s*#?\s*(?P<number>\d+)|#\s*(?P<hash_number>\d+))"
     r"\s*(?:please)?\s*[.!?]*$",
+=======
+    r"(?:the\s+)?(?:recipe|result|option|number|#)\s*(?P<number>\d+)\s*(?:please)?\s*[.!?]*$",
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
     re.IGNORECASE,
 )
 _RESULT_ORDINAL = re.compile(
@@ -69,6 +83,13 @@ _RESULT_ORDINALS = {
 def _normalize(t):
     t = re.sub(r"^(?:a|an|any|the|some)\s+", "", t.strip())
     t = re.sub(r"[- ]free$", "", t)
+<<<<<<< HEAD
+=======
+    if t not in GROUPS:  # typo tolerance for the restriction groups only (diary -> dairy)
+        close = difflib.get_close_matches(t, list(GROUPS), n=1, cutoff=0.75)
+        if close:
+            t = close[0]
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
     return t
 
 
@@ -104,16 +125,22 @@ class Session:
         self.sub_recipe_id = None
         self.sub_target = None
         self.active_recipe = None
+<<<<<<< HEAD
         self.pending_target = None
+=======
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 
     def _validated_terms(self, terms, warnings, kind):
         accepted = []
         for term in terms:
+<<<<<<< HEAD
             vocabulary = (self.index.vocabulary if self.index is not None else frozenset()) | _GROUP_NAMES
             normalized = normalize_term(term, vocabulary)
             if normalized != term.strip().lower():
                 warnings.append(f"Interpreting '{term}' as '{normalized}'.")
             term = normalized
+=======
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
             if term in GROUPS or _term_mask(
                 self.df, term, for_exclusion=(kind == "exclude")
             ).any():
@@ -134,6 +161,7 @@ class Session:
     def _selection_number(self, message):
         numeric = _RESULT_NUMBER.fullmatch(message)
         if numeric:
+<<<<<<< HEAD
             return int(numeric.group("number") or numeric.group("hash_number"))
         ordinal = _RESULT_ORDINAL.fullmatch(message)
         if ordinal:
@@ -171,6 +199,16 @@ class Session:
                     "action": "ask",
                     "message": "I haven't shown any recipes yet. Try 'find a saffron rice recipe'.",
                 }
+=======
+            return int(numeric.group("number"))
+        ordinal = _RESULT_ORDINAL.fullmatch(message)
+        if ordinal:
+            return _RESULT_ORDINALS[ordinal.group("ordinal").lower()]
+        return None
+
+    def _recipe_details(self, number):
+        if number < 1 or number > len(self.last_results):
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
             return {
                 "action": "ask",
                 "message": (
@@ -188,7 +226,10 @@ class Session:
             }
 
         row = rows.iloc[0]
+<<<<<<< HEAD
         self.active_recipe = row["id"]
+=======
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
         steps = list(row.get("steps", []) or [])
         instructions = row.get("instructions", "")
         if not isinstance(instructions, str):
@@ -271,9 +312,42 @@ class Session:
 
     def _resolve_substitution_recipe(self, message, target):
         """Return (id, resolution evidence) or (None, unresolved/ambiguous)."""
+<<<<<<< HEAD
         resolved_id, resolution = self._resolve_recipe_reference(message)
         if resolution != "not a reference":
             return resolved_id, resolution
+=======
+        explicit_id = _RECIPE_ID.search(message)
+        if explicit_id:
+            found = self.df.loc[self.df["id"] == explicit_id.group(0)]
+            if not found.empty:
+                return found.iloc[0]["id"], "explicit id"
+            return None, "unresolved"
+
+        number_match = re.search(r"\b(?:recipe|number)\s+(\d+)\b|#\s*(\d+)", message, re.I)
+        ordinal_match = re.search(
+            r"\b(?:the\s+)?(first|second|third|fourth|fifth)(?:\s+one)?\b",
+            message,
+            re.I,
+        )
+        if number_match or ordinal_match:
+            if number_match:
+                number = int(number_match.group(1) or number_match.group(2))
+            else:
+                number = _ORDINALS[ordinal_match.group(1).lower()]
+            if 1 <= number <= len(self.last_results):
+                return self.last_results[number - 1]["id"], f"result {number}"
+            return None, "unresolved"
+
+        if re.search(r"\b(?:this|that|it|the recipe)\b", message, re.I):
+            if self.active_recipe:
+                return self.active_recipe, "active recipe"
+            if len(self.last_results) == 1:
+                return self.last_results[0]["id"], "only last result"
+            if len(self.last_results) > 1:
+                return None, "ambiguous"
+            return None, "unresolved"
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 
         if re.search(r"\b(?:from|in)\s+recipe\b", message, re.I):
             if len(self.last_results) == 1:
@@ -356,10 +430,13 @@ class Session:
                 "Which recipe? Search for one first, or give a recipe number or id."
             )
 
+<<<<<<< HEAD
         return self._run_substitution(resolved_id, resolution, target, warnings)
 
     def _run_substitution(self, resolved_id, resolution, target, warnings=None):
         warnings = list(warnings or [])
+=======
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
         recipe = self.df.loc[self.df["id"] == resolved_id].iloc[0]
         self.active_recipe = resolved_id
         self.sub_recipe_id = resolved_id
@@ -400,6 +477,7 @@ class Session:
         if msg in {"reset", "clear", "new", "start over"}:
             self.reset()
             return {"action": "reset"}
+<<<<<<< HEAD
         if _HELP.fullmatch(msg):
             return {"action": "help", "message": HELP_TEXT}
         warnings = []
@@ -442,11 +520,19 @@ class Session:
                 return self._run_substitution(
                     result["id"], f"result {selection_number}", target,
                 )
+=======
+        selection_number = self._selection_number(message)
+        if selection_number is not None:
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
             return self._recipe_details(selection_number)
         substitution = self._handle_substitution(message)
         if substitution is not None:
             return substitution
         remaining = msg
+<<<<<<< HEAD
+=======
+        warnings = []
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 
         count_match = _RECIPE_COUNT.search(remaining)
         if count_match:
@@ -526,13 +612,17 @@ class Session:
 def format_results(out):
     if out["action"] == "reset":
         return "Cleared the search and all restrictions."
+<<<<<<< HEAD
     if out["action"] == "help":
         return out["message"]
+=======
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
     if out["action"] == "ask":
         using_recipe = out.get("using_recipe")
         return f"{using_recipe}\n{out['message']}" if using_recipe else out["message"]
     if out["action"] == "details":
         recipe = out["recipe"]
+<<<<<<< HEAD
         steps = recipe.get("steps") or [
             line.strip() for line in recipe.get("instructions", "").splitlines() if line.strip()
         ]
@@ -542,6 +632,14 @@ def format_results(out):
             *[f"- {ingredient}" for ingredient in recipe["ingredients"]],
             "Instructions (numbered by non-empty original instruction line):",
             *[f"{number}. {step}" for number, step in enumerate(steps, 1)],
+=======
+        lines = [
+            f"Recipe {out['selection_number']}: {recipe['title']} [{recipe['id']}]",
+            "Ingredients:",
+            *[f"- {ingredient}" for ingredient in recipe["ingredients"]],
+            "Instructions:",
+            recipe["instructions"],
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
         ]
         return "\n".join(lines)
     if out["action"] == "match":
@@ -561,8 +659,12 @@ def format_results(out):
     lines = [f"WARNING: {w}" for w in out.get("warnings", [])]
     lines += [f"Search: '{out['query']}' | must include: {out['include'] or '-'} | excluded: {out['exclude'] or '-'}"]
     for i, r in enumerate(out["results"], 1):
+<<<<<<< HEAD
         step_label = "step" if r["n_steps"] == 1 else "steps"
         lines.append(f"{i}. {r['title']}  [{r['id']}]  ({r['n_steps']} {step_label}, score {r['score']})")
+=======
+        lines.append(f"{i}. {r['title']}  [{r['id']}]  ({r['n_steps']} steps, score {r['score']})")
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
         for e in r["evidence"]:
             lines.append(f"     - {e}")
     if out["note"]:

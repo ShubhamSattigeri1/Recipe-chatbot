@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Python virtual environments
 venv/
 .venv/
@@ -28,3 +29,6 @@ Thumbs.db
 *.pkl
 
 venv/
+=======
+.env
+>>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd

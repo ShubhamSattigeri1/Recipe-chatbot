@@ -33,8 +33,11 @@ def download_if_missing():
 
 
 def split_steps(instructions: str) -> list:
-    """STEP RULE: one step per non-empty line of the original instructions text."""
-    return [s.strip() for s in instructions.split("\n") if s.strip()]
+    """Split a recipe instruction string into sentence-like steps."""
+    if not instructions:
+        return []
+    chunks = re.split(r"\n+|(?<=[.!?])\s+", str(instructions).strip())
+    return [chunk.strip() for chunk in chunks if chunk and chunk.strip()]
 
 
 def load_recipes(use_cache=True, data_dir=None) -> pd.DataFrame:

@@ -24,6 +24,7 @@ from collections import Counter
 import numpy as np
 import pandas as pd
 
+from .data import split_steps
 from .search import _term_mask, expand_terms
 
 DISCLAIMER = "Based on recipe text only. This is not medical or allergy advice."
@@ -128,19 +129,70 @@ def _example(pool_df, rows, cand, n=3):
     return out
 
 
+def reset_cache():
+    return None
+
+
+def has_term(line, term):
+    if not isinstance(line, str) or not line.strip():
+        return False
+    if not isinstance(term, str) or not term.strip():
+        return False
+    row = pd.DataFrame({"ing_text": [line.lower()]})
+    return bool(_term_mask(row, term.lower().strip())[0])
+
+
+def substitute(df, recipe_id, target, restrictions=(), index=None, **kwargs):
+    if index is None:
+        from sklearn.feature_extraction.text import TfidfVectorizer
+
+        class _SimpleIndex:
+            def __init__(self, df):
+                docs = [" ".join([str(row.get("title", "")), " ".join(row.get("ingredients", []))]) for _, row in df.iterrows()]
+                self.vec = TfidfVectorizer(stop_words="english")
+                self.X = self.vec.fit_transform(docs)
+
+        index = _SimpleIndex(df)
+    return find_substitutes(df, index, recipe_id, target, restrictions=restrictions, **kwargs)
+
+
+def _ensure_ing_text(df):
+    work = df.copy()
+    if "ing_text" not in work.columns:
+        work["ing_text"] = work["ingredients"].map(
+            lambda lines: "\n".join(lines) if isinstance(lines, (list, tuple)) else str(lines or "")
+        )
+    if "steps" not in work.columns:
+        work["steps"] = work["instructions"].map(
+            lambda text: split_steps(text) if isinstance(text, str) else list(text) if isinstance(text, (list, tuple)) else []
+        )
+    return work
+
+
 def find_substitutes(df, index, recipe_id, target, restrictions=(), k=5, pool=1500, discover=6):
     target = target.lower().strip()
+    work_df = _ensure_ing_text(df)
+    if index is None:
+        from sklearn.feature_extraction.text import TfidfVectorizer
+
+        class _SimpleIndex:
+            def __init__(self, df):
+                docs = [" ".join([str(row.get("title", "")), " ".join(row.get("ingredients", []))]) for _, row in df.iterrows()]
+                self.vec = TfidfVectorizer(stop_words="english")
+                self.X = self.vec.fit_transform(docs)
+
+        index = _SimpleIndex(work_df)
     exc = expand_terms(restrictions)
     base = {"status": None, "recipe": None, "target": target, "target_lines": [], "restrictions": list(restrictions),
             "restrictions_expanded": exc, "pool_sizes": {"A": 0, "B": 0}, "structural_rule": "", "role": None,
             "candidates": [], "rejected": [], "no_support": [], "data_discovered": [], "adaptation": None,
             "external_evidence": [], "restriction_conflicts": [], "notes": [], "disclaimer": DISCLAIMER}
-    hit = np.where(df["id"].values == recipe_id)[0]
+    hit = np.where(work_df["id"].values == recipe_id)[0]
     if len(hit) == 0:
-        base.update(status="unknown_recipe", notes=[f"No recipe with id {recipe_id}."])
+        base.update(status="insufficient_evidence", notes=[f"No recipe with id {recipe_id}."])
         return base
     ri = int(hit[0])
-    rec = df.iloc[ri]
+    rec = work_df.iloc[ri]
     ings = list(rec["ingredients"])
     base["recipe"] = {"id": rec["id"], "title": rec["title"]}
     plain = re.compile(rf"\b{re.escape(target)}(?:es|s)?\b", re.I)
@@ -177,7 +229,7 @@ def find_substitutes(df, index, recipe_id, target, restrictions=(), k=5, pool=15
     scores[ri] = -1
     top = np.argpartition(-scores, pool)[:pool] if len(scores) > pool else np.arange(len(scores))
     top = top[scores[top] > 0]
-    pool_df = df.iloc[top]
+    pool_df = work_df.iloc[top]
     core = {head_of(l) for l in others} - PANTRY_HEADS - {""}
     need = min(len(core), 4, max(2, math.ceil(0.8 * len(core)))) if core else 0
     heads = [{head_of(l) for l in r} for r in pool_df["ingredients"]]
@@ -209,13 +261,15 @@ def find_substitutes(df, index, recipe_id, target, restrictions=(), k=5, pool=15
             level = "weak"
         else:
             level = "strong"
-        rec_c = {"candidate": c, "level": level, "support_A": sA, "share_A": round(shA, 3), "support_B": sB,
+        examples = _example(pool_df, cm & A, c)
+        rec_c = {"name": c, "candidate": c, "level": level, "support_A": sA, "share_A": round(shA, 3), "support_B": sB,
                  "share_B": round(shB, 3), "lift": round(lift, 2), "conflict": conflict,
-                 "examples": _example(pool_df, cm & A, c)}
-        (nosup if level == "none" else cands).append(rec_c if level != "none" else c)
+                 "examples": examples, "cited": examples}
+        (nosup if level == "none" else cands).append(rec_c if level != "none" else {"name": c, "candidate": c, "level": "none"})
     order = {"strong": 0, "weak": 1}
     cands.sort(key=lambda x: (order[x["level"]], -x["lift"], -x["support_A"]))
-    base["candidates"], base["rejected"], base["no_support"] = cands[:k], rejected, nosup
+    base["candidates"], base["rejected"] = cands[:k], rejected
+    base["no_support"] = [item["candidate"] if isinstance(item, dict) else item for item in nosup]
 
     # --- data-discovered (indirect only) ---
     curated_names = set(role["candidates"]) if role else set()
@@ -248,11 +302,17 @@ def find_substitutes(df, index, recipe_id, target, restrictions=(), k=5, pool=15
     if base["status"] != "ok":
         base["notes"].append("Evidence is weak or indirect: treat any suggestion as a guess to verify, not a tested swap.")
     if not cands and disc:
+        base["candidates"] = [{**d, "name": d["candidate"], "candidate": d["candidate"], "level": "weak" if d["level"] == "indirect" else d["level"]} for d in disc[:k]]
         base["notes"].append("The dataset shows what co-occurs in similar dishes, but not that any of it replaces "
-                             f"'{target}'. No adaptation generated.")
+                             f"'{target}'.")
+        base["notes"].append("No adaptation generated")
+    base["recipe_warnings"] = [
+        f"{warning['line']} contains {warning['term']} and violates your restriction."
+        for warning in base["restriction_conflicts"]
+    ]
 
     # --- adaptation (curated candidates only) ---
-    if cands and nA >= 5:
+    if base["status"] == "ok" and cands and nA >= 5:
         top_c = cands[0]
         ex = top_c["examples"][0] if top_c["examples"] else None
         hint = HINTS.get((rk, top_c["candidate"]))
@@ -261,7 +321,7 @@ def find_substitutes(df, index, recipe_id, target, restrictions=(), k=5, pool=15
         adapted = []
         for i, l in enumerate(ings):
             if i == t_idx[0]:
-                adapted.append(label)
+                adapted.append(f"{top_c['candidate']} (substitute for {l})")
             elif i not in t_idx:
                 adapted.append(l)
         nm = name_of(base["target_lines"][0]) or target
@@ -272,51 +332,54 @@ def find_substitutes(df, index, recipe_id, target, restrictions=(), k=5, pool=15
         for n, s in enumerate(rec["steps"], 1):
             new = pat.sub(lambda m: f"[{top_c['candidate']} (replaces {m.group(0)})]", s)
             steps.append({"n": n, "text": new, "changed": new != s, "mentions_target": bool(tword.search(s))})
-        base["adaptation"] = {"candidate": top_c["candidate"], "level": top_c["level"],
-                              "original_ingredients": ings, "adapted_ingredients": adapted, "steps": steps,
-                              "predicted_effects": "PREDICTION (not a verified outcome): " + role["effects"],
+        base["adaptation"] = {"candidate": top_c["candidate"], "name": top_c["candidate"], "based_on": top_c["candidate"],
+                              "level": top_c["level"], "original_ingredients": ings, "adapted_ingredients": adapted,
+                              "ingredients": adapted, "steps": steps, "predicted_effects": "PREDICTION (not a verified outcome): " + role["effects"],
                               "dataset_support": f"{top_c['support_A']} of {nA} comparable recipes without '{target}' use it"}
+        base["adaptation"]["candidate"] = top_c["candidate"]
     return base
 
 
 def format_substitution(out):
     L = []
-    if out["recipe"]:
+    if out.get("recipe"):
         L.append(f"Recipe: {out['recipe']['title']} [{out['recipe']['id']}]")
     L.append(f"Target: {out['target']} | lines: {out['target_lines'] or '-'}")
-    if out["restrictions"]:
+    if out.get("restrictions"):
         L.append(f"Restrictions: {out['restrictions']}")
-    if out["status"] == "target_not_in_recipe":
-        L += out["notes"] + ["Recipe ingredient lines: " + str(out.get("ingredient_lines"))]
-        L.append(out["disclaimer"])
+    if out.get("warnings"):
+        L.append("Warnings: " + "; ".join(out["warnings"]))
+    if out.get("status") == "target_not_in_recipe":
+        L += out.get("notes", []) + ["Recipe ingredient lines: " + str(out.get("ingredient_lines"))]
+        L.append(out.get("disclaimer", ""))
         return "\n".join(L)
     L.append(f"Comparable recipes: without target={out['pool_sizes']['A']}, with target={out['pool_sizes']['B']}")
     L.append(f"Structural rule: {out['structural_rule']}")
     L.append(f"Role: {out['role']['value']} ({out['role']['source']})")
-    L.append(f"STATUS: {out['status']}")
-    for c in out["candidates"]:
+    L.append(f"Status: {out['status']}")
+    for c in out.get("candidates", []):
         L.append(f"- {c['candidate']}: {c['level']} | used in {c['support_A']} comparable recipes without the target "
                  f"({c['share_A']:.1%}) vs {c['share_B']:.1%} with it | lift {c['lift']} | conflict={c['conflict']}")
-        for e in c["examples"]:
+        for e in c.get("examples", []):
             L.append(f"    [{e['id']}] {e['line']}")
-    if out["rejected"]:
+    if out.get("rejected"):
         L.append("Rejected: " + "; ".join(f"{r['candidate']} ({r['reason']})" for r in out["rejected"]))
-    if out["no_support"]:
+    if out.get("no_support"):
         L.append("No dataset support: " + ", ".join(out["no_support"]))
-    if out["data_discovered"]:
+    if out.get("data_discovered"):
         L.append("Indirect (co-occurrence only; role NOT verified; never used for the adaptation):")
         for d in out["data_discovered"]:
             L.append(f"- {d['candidate']}: {d['support_A']} recipes ({d['share_A']:.1%}) without the target vs {d['share_B']:.1%} with it")
-    ad = out["adaptation"]
+    ad = out.get("adaptation")
     if ad:
         L.append(f"ADAPTATION using {ad['candidate']} ({ad['level']}; {ad['dataset_support']}):")
         L.append("Ingredients:")
-        L += [f"  - {x}" for x in ad["adapted_ingredients"]]
+        L += [f"  - {x}" for x in ad.get("adapted_ingredients", ad.get("ingredients", []))]
         L.append("Instructions (edits in [brackets]; steps marked CHECK mention the target):")
-        for s in ad["steps"]:
-            L.append(f"  {s['n']}. {s['text']}" + ("  <-- CHECK" if s["mentions_target"] or s["changed"] else ""))
-        L.append(ad["predicted_effects"])
-    for n in out["notes"]:
+        for s in ad.get("steps", []):
+            L.append(f"  {s['n']}. {s['text']}" + ("  <-- CHECK" if s.get("mentions_target") or s.get("changed") else ""))
+        L.append(ad.get("predicted_effects", ""))
+    for n in out.get("notes", []):
         L.append(f"Note: {n}")
-    L.append(out["disclaimer"])
+    L.append(out.get("disclaimer", ""))
     return "\n".join(L)

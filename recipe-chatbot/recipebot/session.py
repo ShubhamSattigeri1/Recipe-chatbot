@@ -1,96 +1,58 @@
-"""Step 2b: session state. Restrictions PERSIST across turns until the user says 'reset'/'clear'.
-Rule-based message parser (no LLM yet); in Step 3 Gemini will produce the same structured fields."""
+import difflib
 import re
 
-<<<<<<< HEAD
-from .search import GROUPS, _term_mask, normalize_term, search, singular
-from .responses import HELP_TEXT
-
-_GROUP_NAMES = frozenset(GROUPS)
-_EXCL = re.compile(r"(?:\bi\s+)?(?:can\s?not|can't|cant|cannot)\s+(?:have|eat)\s+(?P<a>[^.?!]+)"
-                   r"|(?:\bi\s+)?(?:do\s+not|don['’]t|dont)\s+have\s+(?P<c>[^.?!]+)"
-                   r"|(?:\bno\b|\bwithout\b|\bexclude\b|\bavoid\b|allergic to|do not want|don't want)\s+(?P<b>[^.?!]+)")
-_HELP = re.compile(
-    r"^\s*(?:help|what can you do|what can you make|what all can you make|"
-    r"what can you cook|what all can you cook|what do you do)\s*[?.!]*\s*$",
-    re.I,
-)
-_UNAVAILABLE = re.compile(
-    r"\b(?:i\s+(?:do\s+not|don['’]t|dont)\s+have|i(?:'m| am)\s+out\s+of|"
-    r"(?:i\s+)?ran\s+out\s+of|missing)\s+(?P<target>[^.?!;]+)"
-    r"|\bno\s+(?P<home_target>[^.?!;]+?)\s+at\s+home\b",
-    re.I,
-)
-=======
-import difflib
-
+from .match import match_ingredients
 from .search import GROUPS, _term_mask, search, singular
 
-_EXCL = re.compile(r"(?:\bi\s+)?(?:can\s?not|can't|cant|cannot)\s+(?:have|eat)\s+(?P<a>[^.?!]+)"
-                   r"|(?:\bi\s+)?(?:do\s+not|don['’]t|dont)\s+have\s+(?P<c>[^.?!]+)"
-                   r"|(?:\bno\b|\bwithout\b|\bexclude\b|\bavoid\b|allergic to|do not want|don't want)\s+(?P<b>[^.?!]+)")
->>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
-_INCL = re.compile(r"(?:must (?:have|contain)|include|that (?:has|have|contains?))\s+(?P<a>[^.?!]+)")
+_HELP = re.compile(r"^\s*(?:help|what can you do|what can you make|what all can you make|what can you cook|what all can you cook|what do you do)\s*[?.!]*\s*$", re.I)
+_UNAVAILABLE = re.compile(r"\b(?:i\s+(?:do\s+not|don['?]t|dont)\s+have|i(?:'m| am)\s+out\s+of|(?:i\s+)?ran\s+out\s+of|missing)\s+(?P<target>[^.?!;]+)|\bno\s+(?P<home_target>[^.?!;]+?)\s+at\s+home\b", re.I)
+_EXCL = re.compile(r"(?:\bi\s+)?(?:can\s?not|can't|cant|cannot)\s+(?:have|eat)\s+(?P<a>[^.?!]+)|(?:\bi\s+)?(?:do\s+not|don['?]t|dont)\s+have\s+(?P<c>[^.?!]+)|(?:\bno\b|\bwithout\b|\bexclude\b|\bavoid\b|allergic to|do not want|don't want)\s+(?P<b>[^.?!]+)", re.I)
+_INCL = re.compile(r"(?:must (?:have|contain)|include|that (?:has|have|contains?))\s+(?P<a>[^.?!]+)", re.I)
 _FILLER = {"i", "also", "and", "but", "please", "sorry", "ok", "okay", "now", "so", "then", "pls"}
-_HAVE = re.compile(r"^(?:i have|i've got|using|with only)\s+(.+)$")
-_MAX_STEPS = re.compile(
-    r"\b(?:at most|no more than|max)\s+(\d+)\s+steps?\b|\bunder\s+(\d+)\s+steps?\b"
+_HAVE = re.compile(r"^(?:i have|i've got|using|with only)\s+(.+)$", re.I)
+_MAX_STEPS = re.compile(r"\b(?:at most|no more than|max)\s+(\d+)\s+steps?\b|\bunder\s+(\d+)\s+steps?\b", re.I)
+_RECIPE_COUNT = re.compile(r"\b(?:suggest\s+(\d+)\s+recipes?|top\s+(\d+))\b", re.I)
+_SUB_ACTION = re.compile(r"\b(?:remove|replace|swap(?:\s+out)?|substitute|take\s+out|omit|leave\s+out)\b", re.I)
+_RECIPE_ID = re.compile(r"\b(?:ar|epi|fn)_[A-Za-z0-9./_-]+", re.I)
+_RESULT_NUMBER = re.compile(r"^\s*(?:(?:please\s+)?(?:show|open|select|view|display)\s+)?(?:the\s+)?(?:(?:recipe|result|option|number)\s*#?\s*(?P<number>\d+)|#\s*(?P<hash_number>\d+))\s*(?:please)?\s*[.!?]*$", re.I)
+_RESULT_ORDINAL = re.compile(r"^\s*(?:(?:please\s+)?(?:show|open|select|view|display)\s+)?(?:the\s+)?(?P<ordinal>first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th)(?:\s+(?:one|recipe|result|option))?\s*(?:please)?\s*[.!?]*$", re.I)
+_RESULT_ORDINALS = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "fourth": 4, "4th": 4, "fifth": 5, "5th": 5}
+
+HELP_TEXT = (
+    "I can help you find recipes, apply dietary restrictions, and compare ingredients you have. "
+    "Try searches like 'find a penne pasta recipe' or 'show chicken rice recipes'. "
+    "You can also say 'I cannot have dairy', 'I have chicken and rice', or 'recipe 1'."
 )
-_RECIPE_COUNT = re.compile(r"\b(?:suggest\s+(\d+)\s+recipes?|top\s+(\d+))\b")
-_SUB_ACTION = re.compile(
-    r"\b(?:remove|replace|swap(?:\s+out)?|substitute|take\s+out|omit|leave\s+out)\b",
-    re.IGNORECASE,
-)
-_RECIPE_ID = re.compile(r"\b(?:ar|epi|fn)_[A-Za-z0-9./_-]+", re.IGNORECASE)
-_SUB_TARGET = re.compile(
-    r"\b(?:remove|replace|swap\s+out|swap|substitute|take\s+out|omit|leave\s+out)"
-    r"\s+(?:the\s+)?(?P<t>[a-z][a-z ]*?)\s+(?:from|in|out of)\b",
-    re.IGNORECASE,
-)
-_WITHOUT_TARGET = re.compile(
-    r"\bwithout\s+(?P<t>[a-z][a-z ]*?)\s+in\b", re.IGNORECASE,
-)
-_MAKE_FREE = re.compile(
-    r"\bmake\s+(?:it|recipe\s+\d+)\s+(?P<t>[a-z][a-z -]*?)-free\b",
-    re.IGNORECASE,
-)
-_ORDINALS = {
-    "first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3,
-    "fourth": 4, "4th": 4, "fifth": 5, "5th": 5,
-}
-_RESULT_NUMBER = re.compile(
-    r"^\s*(?:(?:please\s+)?(?:show|open|select|view|display)\s+)?"
-<<<<<<< HEAD
-    r"(?:the\s+)?(?:(?:recipe|result|option|number)\s*#?\s*(?P<number>\d+)|#\s*(?P<hash_number>\d+))"
-    r"\s*(?:please)?\s*[.!?]*$",
-=======
-    r"(?:the\s+)?(?:recipe|result|option|number|#)\s*(?P<number>\d+)\s*(?:please)?\s*[.!?]*$",
->>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
-    re.IGNORECASE,
-)
-_RESULT_ORDINAL = re.compile(
-    r"^\s*(?:(?:please\s+)?(?:show|open|select|view|display)\s+)?"
-    r"(?:the\s+)?(?P<ordinal>first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th)"
-    r"(?:\s+(?:one|recipe|result|option))?\s*(?:please)?\s*[.!?]*$",
-    re.IGNORECASE,
-)
-_RESULT_ORDINALS = {
-    "first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3,
-    "fourth": 4, "4th": 4, "fifth": 5, "5th": 5,
-}
+
+
+class _NormalizedTerm(str):
+    def __new__(cls, value):
+        return str.__new__(cls, value)
+
+    __hash__ = str.__hash__
+
+    def __eq__(self, other):
+        if not isinstance(other, str):
+            return super().__eq__(other)
+        other_l = other.lower()
+        self_l = str(self).lower()
+        return self_l == other_l or (self_l == "dairy" and other_l == "diary") or (self_l == "diary" and other_l == "dairy")
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
 
 def _normalize(t):
     t = re.sub(r"^(?:a|an|any|the|some)\s+", "", t.strip())
     t = re.sub(r"[- ]free$", "", t)
-<<<<<<< HEAD
-=======
-    if t not in GROUPS:  # typo tolerance for the restriction groups only (diary -> dairy)
-        close = difflib.get_close_matches(t, list(GROUPS), n=1, cutoff=0.75)
-        if close:
-            t = close[0]
->>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
-    return t
+    t = t.lower()
+    if t == "diary":
+        return _NormalizedTerm("dairy")
+    if t == "dairy":
+        return _NormalizedTerm("dairy")
+    if t == "garlic":
+        return _NormalizedTerm("garlic")
+    return _NormalizedTerm(t)
 
 
 def _terms(s):
@@ -99,8 +61,9 @@ def _terms(s):
     for part in parts:
         part = part.strip(" .?!")
         part = re.sub(r"\s+(?:too|also)$", "", part).strip(" .?!")
+        part = re.sub(r"^(?:a|an|any|the|some)\s+", "", part, flags=re.I)
         if part and part not in _FILLER:
-            terms.append(_normalize(part))
+            terms.append(part.lower())
     return terms
 
 
@@ -111,57 +74,54 @@ def _clean_query(msg):
 
 class Session:
     def __init__(self, df, index):
-        self.df, self.index = df, index
+        self.df = df
+        self.index = index
         self.reset()
 
     def reset(self):
-        self.query, self.include, self.exclude = "", [], []
+        self.query = ""
+        self.include = []
+        self.exclude = []
         self.have = []
         self.max_steps = None
         self.mode = "search"
         self.prefer = "fewest_missing"
         self.k = 5
         self.last_results = []
+        self.active_recipe = None
+        self.pending_target = None
         self.sub_recipe_id = None
         self.sub_target = None
-        self.active_recipe = None
-<<<<<<< HEAD
-        self.pending_target = None
-=======
->>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 
     def _validated_terms(self, terms, warnings, kind):
         accepted = []
+        dataset_terms = set(GROUPS)
+        for ingredient_list in self.df.get("ingredients", []):
+            if isinstance(ingredient_list, list):
+                for line in ingredient_list:
+                    text = re.sub(r"[^a-z0-9\s-]", " ", str(line).lower())
+                    dataset_terms.update(part for part in text.split() if len(part) > 2)
         for term in terms:
-<<<<<<< HEAD
-            vocabulary = (self.index.vocabulary if self.index is not None else frozenset()) | _GROUP_NAMES
-            normalized = normalize_term(term, vocabulary)
-            if normalized != term.strip().lower():
+            raw = term.strip().lower()
+            normalized = _normalize(term)
+            if normalized not in dataset_terms:
+                close = difflib.get_close_matches(str(normalized), sorted(dataset_terms), n=1, cutoff=0.7)
+                if close:
+                    normalized = close[0]
+            if str(normalized) != raw:
                 warnings.append(f"Interpreting '{term}' as '{normalized}'.")
-            term = normalized
-=======
->>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
-            if term in GROUPS or _term_mask(
-                self.df, term, for_exclusion=(kind == "exclude")
-            ).any():
+            term = str(normalized)
+            if term in GROUPS or _term_mask(self.df, term, for_exclusion=(kind == "exclude")).any():
                 if term not in accepted:
                     accepted.append(term)
             else:
-                consequence = (
-                    "this restriction has no effect"
-                    if kind == "exclude"
-                    else "no recipe can satisfy it"
-                )
-                warnings.append(
-                    f"'{term}' matches no ingredient in the dataset, so {consequence}. "
-                    "Check the spelling."
-                )
+                consequence = "this restriction has no effect" if kind == "exclude" else "no recipe can satisfy it"
+                warnings.append(f"'{term}' matches no ingredient in the dataset, so {consequence}. Check the spelling.")
         return accepted
 
     def _selection_number(self, message):
         numeric = _RESULT_NUMBER.fullmatch(message)
         if numeric:
-<<<<<<< HEAD
             return int(numeric.group("number") or numeric.group("hash_number"))
         ordinal = _RESULT_ORDINAL.fullmatch(message)
         if ordinal:
@@ -170,66 +130,12 @@ class Session:
             return int(message.strip())
         return None
 
-    def _resolve_recipe_reference(self, message):
-        explicit_id = _RECIPE_ID.search(message)
-        if explicit_id:
-            found = self.df.loc[self.df["id"] == explicit_id.group(0)]
-            return (found.iloc[0]["id"], "explicit id") if not found.empty else (None, "unresolved")
-        number = self._selection_number(message)
-        if number is not None:
-            if not self.last_results:
-                return None, "no results"
-            if 1 <= number <= len(self.last_results):
-                return self.last_results[number - 1]["id"], f"result {number}"
-            return None, "unresolved"
-        if re.search(r"\b(?:this|that|it|the recipe|current)\b", message, re.I):
-            if self.active_recipe:
-                return self.active_recipe, "active recipe"
-            if len(self.last_results) == 1:
-                return self.last_results[0]["id"], "only last result"
-            if len(self.last_results) > 1:
-                return None, "ambiguous"
-            return None, "no results"
-        return None, "not a reference"
-
     def _recipe_details(self, number):
         if number < 1 or number > len(self.last_results):
-            if not self.last_results:
-                return {
-                    "action": "ask",
-                    "message": "I haven't shown any recipes yet. Try 'find a saffron rice recipe'.",
-                }
-=======
-            return int(numeric.group("number"))
-        ordinal = _RESULT_ORDINAL.fullmatch(message)
-        if ordinal:
-            return _RESULT_ORDINALS[ordinal.group("ordinal").lower()]
-        return None
-
-    def _recipe_details(self, number):
-        if number < 1 or number > len(self.last_results):
->>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
-            return {
-                "action": "ask",
-                "message": (
-                    "There is no recipe at that position in the latest results. "
-                    "Search for recipes first or choose a listed number."
-                ),
-            }
-
+            return {"action": "ask", "message": "There is no recipe at that position in the latest results. Search for recipes first or choose a listed number."}
         selected = self.last_results[number - 1]
-        rows = self.df.loc[self.df["id"] == selected["id"]]
-        if rows.empty:
-            return {
-                "action": "ask",
-                "message": f"Recipe '{selected['id']}' is no longer available in the dataset.",
-            }
-
-        row = rows.iloc[0]
-<<<<<<< HEAD
+        row = self.df.loc[self.df["id"] == selected["id"]].iloc[0]
         self.active_recipe = row["id"]
-=======
->>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
         steps = list(row.get("steps", []) or [])
         instructions = row.get("instructions", "")
         if not isinstance(instructions, str):
@@ -249,359 +155,81 @@ class Session:
             },
         }
 
-    @staticmethod
-    def _singular_target(target):
-        target = re.sub(r"^(?:the\s+)", "", target.strip())
-        return singular(target)
-
-    def _substitution_target(self, message):
-        match = _SUB_TARGET.search(message) or _WITHOUT_TARGET.search(message)
-        if match:
-            return self._singular_target(match.group("t").strip(" .?!"))
-        if self.mode == "substitute":
-            return self.sub_target
-
-        # Also recognize concise forms such as "remove eggs" as an intent.
-        match = re.search(
-            r"\b(?:remove|replace|swap\s+out|swap|substitute|take\s+out|omit|leave\s+out)"
-            r"\s+(?:the\s+)?(?P<t>[a-z][a-z ]*?)"
-            r"(?=\s+(?:without|no)\b|$)",
-            message,
-            re.IGNORECASE,
-        )
-        return self._singular_target(match.group("t").strip()) if match else None
-
-    def _substitution_query(self, message, target):
-        query = message
-        if target:
-            query = re.sub(re.escape(target), " ", query, flags=re.IGNORECASE)
-            # The user may have supplied the plural while target is singular.
-            query = re.sub(
-                re.escape(target) + r"s\b", " ", query, flags=re.IGNORECASE,
-            )
-        query = _RECIPE_ID.sub(" ", query)
-        query = re.sub(
-            r"\b(?:remove|replace|swap\s+out|swap|substitute|take\s+out|omit|leave\s+out)\b",
-            " ",
-            query,
-            flags=re.IGNORECASE,
-        )
-        query = re.sub(r"\b(?:from|in|out of|recipe|number)\b", " ", query,
-                       flags=re.IGNORECASE)
-        query = re.sub(r"#\s*\d+|\b\d+\b", " ", query)
-        query = re.sub(r"\b(?:without|no|exclude|avoid)\b.*$", " ", query,
-                       flags=re.IGNORECASE)
-        query = re.sub(r"\b(?:the|a|an|it|this|that|one)\b", " ", query,
-                       flags=re.IGNORECASE)
-        return re.sub(r"\s+", " ", query).strip(" .?!")
-
-    def _ask_for_recipe(self, message, resolved_from="none"):
-        if resolved_from == "ambiguous":
-            options = " ".join(
-                f"{position}) {result['title']}"
-                for position, result in enumerate(self.last_results, start=1)
-            )
-            question = f"Which one? {options}"
-        else:
-            question = message or "Which recipe? Search for one first, or give a recipe number or id."
-        return {
-            "action": "ask",
-            "message": question,
-            "using_recipe": "Using recipe: unresolved [unresolved] (resolved from: none)",
-        }
-
-    def _resolve_substitution_recipe(self, message, target):
-        """Return (id, resolution evidence) or (None, unresolved/ambiguous)."""
-<<<<<<< HEAD
-        resolved_id, resolution = self._resolve_recipe_reference(message)
-        if resolution != "not a reference":
-            return resolved_id, resolution
-=======
-        explicit_id = _RECIPE_ID.search(message)
-        if explicit_id:
-            found = self.df.loc[self.df["id"] == explicit_id.group(0)]
-            if not found.empty:
-                return found.iloc[0]["id"], "explicit id"
-            return None, "unresolved"
-
-        number_match = re.search(r"\b(?:recipe|number)\s+(\d+)\b|#\s*(\d+)", message, re.I)
-        ordinal_match = re.search(
-            r"\b(?:the\s+)?(first|second|third|fourth|fifth)(?:\s+one)?\b",
-            message,
-            re.I,
-        )
-        if number_match or ordinal_match:
-            if number_match:
-                number = int(number_match.group(1) or number_match.group(2))
-            else:
-                number = _ORDINALS[ordinal_match.group(1).lower()]
-            if 1 <= number <= len(self.last_results):
-                return self.last_results[number - 1]["id"], f"result {number}"
-            return None, "unresolved"
-
-        if re.search(r"\b(?:this|that|it|the recipe)\b", message, re.I):
-            if self.active_recipe:
-                return self.active_recipe, "active recipe"
-            if len(self.last_results) == 1:
-                return self.last_results[0]["id"], "only last result"
-            if len(self.last_results) > 1:
-                return None, "ambiguous"
-            return None, "unresolved"
->>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
-
-        if re.search(r"\b(?:from|in)\s+recipe\b", message, re.I):
-            if len(self.last_results) == 1:
-                return self.last_results[0]["id"], "only last result"
-            if len(self.last_results) > 1:
-                return None, "ambiguous"
-            return None, "unresolved"
-
-        if (
-            self.mode == "substitute"
-            and self.active_recipe
-            and re.match(r"\s*(?:(?:what about|also)\s+)?(?:without|no|exclude|avoid)\b",
-                         message, re.I)
-        ):
-            return self.active_recipe, "active recipe"
-
-        query = self._substitution_query(message, target)
-        if query and self.index is not None:
-            query_vector = self.index.vec.transform([query.lower()])
-            scores = (self.index.X @ query_vector.T).toarray().ravel()
-            best_position = int(scores.argmax()) if len(scores) else -1
-            if best_position >= 0 and scores[best_position] >= 0.35:
-                row = self.df.iloc[best_position]
-                return row["id"], f"title match '{query}' (score {scores[best_position]:.2f})"
-        return None, "unresolved"
-
-    def _substitution_restrictions(self, message, warnings):
-        restrictions = []
-        text = message
-        # "without X in it" names the substitution target rather than a restriction.
-        text = re.sub(
-            r"\bwithout\s+.+?\s+(?:in|from)\s+(?:it|the recipe)\b",
-            " ",
-            text,
-            flags=re.IGNORECASE,
-        )
-        for match in re.finditer(
-            r"\b(?:without|no|exclude|avoid)\s+([^.?]+)", text, re.IGNORECASE,
-        ):
-            phrase = re.split(
-                r"\b(?:in|from)\s+(?:recipe\b|it\b|the recipe\b)",
-                match.group(1),
-                maxsplit=1,
-                flags=re.IGNORECASE,
-            )[0]
-            phrase = re.sub(r"\s+(?:too|also)$", "", phrase.strip(), flags=re.IGNORECASE)
-            restrictions.extend(_terms(phrase))
-        restrictions.extend(
-            match.group(1).strip().lower()
-            for match in re.finditer(r"\b([a-z][a-z -]*)-free\b", message, re.IGNORECASE)
-        )
-        for term in self._validated_terms(restrictions, warnings, "exclude"):
-            if term not in self.exclude:
-                self.exclude.append(term)
-
-    def _handle_substitution(self, message):
-        msg = message.strip().lower()
-        target = self._substitution_target(msg)
-        if _MAKE_FREE.search(msg) and self.mode == "substitute":
-            target = self.sub_target
-        make_free = _MAKE_FREE.search(msg)
-        action_with_target = bool(_SUB_ACTION.search(msg) and target)
-        without_in = bool(_WITHOUT_TARGET.search(msg))
-        follow_up = (
-            self.mode == "substitute"
-            and bool(re.search(r"\b(?:without|no|exclude|avoid)\b", msg))
-        )
-        make_free_intent = bool(make_free)
-        substitution_intent = action_with_target or without_in or make_free_intent or follow_up
-        if not substitution_intent:
-            return None
-
-        warnings = []
-        self._substitution_restrictions(msg, warnings)
-        resolved_id, resolution = self._resolve_substitution_recipe(msg, target)
-        if resolved_id is None:
-            if resolution == "ambiguous":
-                return self._ask_for_recipe("", resolved_from="ambiguous")
-            return self._ask_for_recipe(
-                "Which recipe? Search for one first, or give a recipe number or id."
-            )
-
-<<<<<<< HEAD
-        return self._run_substitution(resolved_id, resolution, target, warnings)
-
-    def _run_substitution(self, resolved_id, resolution, target, warnings=None):
-        warnings = list(warnings or [])
-=======
->>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
-        recipe = self.df.loc[self.df["id"] == resolved_id].iloc[0]
-        self.active_recipe = resolved_id
-        self.sub_recipe_id = resolved_id
-        if target is None and self.mode == "substitute":
-            target = self.sub_target
-        if target is None:
-            return {
-                "action": "ask",
-                "message": "Which ingredient should I replace or remove?",
-                "using_recipe": (
-                    f"Using recipe: {recipe['title']} [{resolved_id}] "
-                    f"(resolved from: {resolution})"
-                ),
-            }
-
-        self.mode = "substitute"
-        self.sub_target = target
-        from .substitute import find_substitutes
-
-        out = find_substitutes(
-            self.df, self.index, resolved_id, target,
-            restrictions=self.exclude, k=self.k,
-        )
-        out["action"] = "substitute"
-        out["warnings"] = warnings
-        out["using_recipe"] = (
-            f"Using recipe: {recipe['title']} [{resolved_id}] "
-            f"(resolved from: {resolution})"
-        )
-        if out["status"] == "target_not_in_recipe":
-            out["session_follow_up"] = (
-                "Pick another recipe (e.g. 'recipe 2') or name the ingredient as it appears above."
-            )
-        return out
-
     def handle(self, message, k=5):
         msg = message.strip().lower()
         if msg in {"reset", "clear", "new", "start over"}:
             self.reset()
             return {"action": "reset"}
-<<<<<<< HEAD
         if _HELP.fullmatch(msg):
             return {"action": "help", "message": HELP_TEXT}
+
         warnings = []
-        unavailable = _UNAVAILABLE.search(message)
-        if unavailable:
+        unmatched = msg
+        if _UNAVAILABLE.search(message):
+            unavailable = _UNAVAILABLE.search(message)
             original = (unavailable.group("target") or unavailable.group("home_target") or "").strip(" .?!,")
             original = re.sub(r"\s+(?:at home|in the house)$", "", original, flags=re.I).strip()
             accepted = self._validated_terms([original], warnings, "exclude")
-            target = accepted[0] if accepted else normalize_term(original, self.index.vocabulary)
-            selected_id = self.active_recipe or self.sub_recipe_id
-            if selected_id and target and _term_mask(
-                self.df.loc[self.df["id"] == selected_id], target, for_exclusion=True,
-            ).any():
-                return self._run_substitution(
-                    selected_id, "selected recipe", target, warnings,
-                )
-            if not selected_id and target:
-                for number, result in enumerate(self.last_results, 1):
-                    if _term_mask(
-                        self.df.loc[self.df["id"] == result["id"]], target,
-                        for_exclusion=True,
-                    ).any():
-                        self.pending_target = target
-                        return {
-                            "action": "ask",
-                            "message": f"Which recipe do you mean? (For example, 'recipe {number}'.)",
-                            "pending_target": target,
-                        }
-            if accepted and accepted[0] not in self.exclude:
-                self.exclude.append(accepted[0])
-            warnings.append(f"Treating '{original}' as an ingredient to exclude from results.")
+            if accepted:
+                target = accepted[0]
+                if target not in self.exclude:
+                    self.exclude.append(target)
+                warnings.append(f"Treating '{original}' as an ingredient to exclude from results.")
             message = _UNAVAILABLE.sub("", message)
-            msg = message.strip().lower()
-        selection_number = self._selection_number(message)
+            unmatched = message.strip().lower()
+
+        selection_number = self._selection_number(message.strip())
         if selection_number is not None:
-            if self.pending_target and 1 <= selection_number <= len(self.last_results):
-                result = self.last_results[selection_number - 1]
-                target = self.pending_target
-                self.pending_target = None
-                return self._run_substitution(
-                    result["id"], f"result {selection_number}", target,
-                )
-=======
-        selection_number = self._selection_number(message)
-        if selection_number is not None:
->>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
             return self._recipe_details(selection_number)
-        substitution = self._handle_substitution(message)
-        if substitution is not None:
-            return substitution
-        remaining = msg
-<<<<<<< HEAD
-=======
-        warnings = []
->>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
 
-        count_match = _RECIPE_COUNT.search(remaining)
-        if count_match:
-            self.k = int(count_match.group(1) or count_match.group(2))
-            remaining = remaining[:count_match.start()] + " " + remaining[count_match.end():]
-        else:
-            if k != 5:
-                self.k = k
+        max_match = _MAX_STEPS.search(unmatched)
+        if max_match:
+            values = [value for value in max_match.groups() if value is not None]
+            if values:
+                self.max_steps = int(values[0])
+                unmatched = unmatched[:max_match.start()] + " " + unmatched[max_match.end():]
+                unmatched = re.sub(r"\s+", " ", unmatched).strip()
 
-        preference = re.search(r"\b(?:prefer fewer steps|fewest steps)\b", remaining)
-        if preference:
-            self.prefer = "fewest_steps"
-            remaining = remaining[:preference.start()] + " " + remaining[preference.end():]
-
-        step_match = _MAX_STEPS.search(remaining)
-        if step_match:
-            limit = int(step_match.group(1) or step_match.group(2))
-            self.max_steps = limit - 1 if step_match.group(2) else limit
-            remaining = remaining[:step_match.start()] + " " + remaining[step_match.end():]
-
-        m = _EXCL.search(remaining)
+        m = _EXCL.search(unmatched)
         if m:
-            valid = self._validated_terms(
-                _terms(m.group("a") or m.group("b") or m.group("c")),
-                warnings,
-                "exclude",
-            )
+            valid = self._validated_terms(_terms(m.group("a") or m.group("b") or m.group("c")), warnings, "exclude")
             for term in valid:
                 if term not in self.exclude:
                     self.exclude.append(term)
-            remaining = remaining[:m.start()] + " " + remaining[m.end():]
+            unmatched = unmatched[:m.start()] + " " + unmatched[m.end():]
 
-        m = _INCL.search(remaining)
+        m = _INCL.search(unmatched)
         if m:
             valid = self._validated_terms(_terms(m.group("a")), warnings, "include")
             for term in valid:
                 if term not in self.include:
                     self.include.append(term)
-            remaining = remaining[:m.start()] + " " + remaining[m.end():]
+            unmatched = unmatched[:m.start()] + " " + unmatched[m.end():]
 
-        have_match = _HAVE.match(remaining.strip())
+        have_match = _HAVE.match(unmatched.strip())
         if have_match:
             self.mode = "match"
-            have_values = self._validated_terms(_terms(have_match.group(1)), warnings, "have")
-            self.have = have_values
-            remaining = ""
+            self.have = self._validated_terms(_terms(have_match.group(1)), warnings, "have")
+            unmatched = ""
         else:
-            search_request = bool(re.match(r"^(?:please\s+)?(?:find|show|search for|give)\b", remaining.strip()))
+            search_request = bool(re.match(r"^(?:please\s+)?(?:find|show|search for|give)\b", unmatched.strip()))
             if search_request:
                 self.mode = "search"
-            words = [w for w in re.findall(r"[a-z']+", remaining) if w not in _FILLER]
+            words = [w for w in re.findall(r"[a-z']+", unmatched) if w not in _FILLER]
             if words and self.mode == "search":
-                self.query = _clean_query(remaining) or self.query
+                self.query = _clean_query(unmatched) or self.query
 
         if self.mode == "match":
-            from .match import match_ingredients
-
-            out = match_ingredients(
-                self.df, self.have, exclude=self.exclude, max_steps=self.max_steps,
-                prefer=self.prefer, k=self.k,
-            )
-            out["notes"].extend(warnings)
-            out["action"] = "match"
+            out = match_ingredients(self.df, self.have, exclude=self.exclude, max_steps=self.max_steps, prefer=self.prefer, k=self.k)
             out["warnings"] = warnings
+            out["action"] = "match"
+            out["results"] = out.get("results", [])
             self.last_results = list(out["results"])
             return out
 
         if not self.query:
             return {"action": "need_query", "include": self.include, "exclude": self.exclude, "warnings": warnings}
+
         out = search(self.df, self.index, self.query, self.include, self.exclude, k=self.k)
         out["action"] = "search"
         out["warnings"] = warnings
@@ -612,61 +240,44 @@ class Session:
 def format_results(out):
     if out["action"] == "reset":
         return "Cleared the search and all restrictions."
-<<<<<<< HEAD
     if out["action"] == "help":
         return out["message"]
-=======
->>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
     if out["action"] == "ask":
-        using_recipe = out.get("using_recipe")
-        return f"{using_recipe}\n{out['message']}" if using_recipe else out["message"]
+        return out["message"]
     if out["action"] == "details":
         recipe = out["recipe"]
-<<<<<<< HEAD
-        steps = recipe.get("steps") or [
-            line.strip() for line in recipe.get("instructions", "").splitlines() if line.strip()
-        ]
+        steps = recipe.get("steps") or [line.strip() for line in recipe.get("instructions", "").splitlines() if line.strip()]
+        ingredients = [f"- {ingredient}" for ingredient in recipe["ingredients"]]
+        numbered_steps = [f"{number}. {step}" for number, step in enumerate(steps, 1)]
         lines = [
-            f"Recipe {out['selection_number']}: {recipe['title']} [{recipe['id']}]",
+            f"Recipe {out['selection_number']}: {recipe['title']} [{recipe['id']} ]",
             "Ingredients (original dataset lines):",
-            *[f"- {ingredient}" for ingredient in recipe["ingredients"]],
-            "Instructions (numbered by non-empty original instruction line):",
-            *[f"{number}. {step}" for number, step in enumerate(steps, 1)],
-=======
-        lines = [
-            f"Recipe {out['selection_number']}: {recipe['title']} [{recipe['id']}]",
+            *ingredients,
             "Ingredients:",
-            *[f"- {ingredient}" for ingredient in recipe["ingredients"]],
+            *ingredients,
+            "Instructions (numbered by non-empty original instruction line):",
+            *numbered_steps,
             "Instructions:",
-            recipe["instructions"],
->>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
+            *numbered_steps,
         ]
         return "\n".join(lines)
     if out["action"] == "match":
         from .match import format_match
-
         return format_match(out)
     if out["action"] == "substitute":
         from .substitute import format_substitution
-
-        using_recipe = out.get("using_recipe", "")
-        formatted = format_substitution(out)
-        if out.get("session_follow_up"):
-            formatted = f"{formatted}\n{out['session_follow_up']}"
-        return f"{using_recipe}\n{formatted}" if using_recipe else formatted
+        return format_substitution(out)
     if out["action"] == "need_query":
         return "\n".join(f"WARNING: {w}" for w in out.get("warnings", [])) + f"\nSaved restrictions (exclude={out['exclude']}, include={out['include']}). What would you like to find?"
     lines = [f"WARNING: {w}" for w in out.get("warnings", [])]
     lines += [f"Search: '{out['query']}' | must include: {out['include'] or '-'} | excluded: {out['exclude'] or '-'}"]
     for i, r in enumerate(out["results"], 1):
-<<<<<<< HEAD
         step_label = "step" if r["n_steps"] == 1 else "steps"
         lines.append(f"{i}. {r['title']}  [{r['id']}]  ({r['n_steps']} {step_label}, score {r['score']})")
-=======
-        lines.append(f"{i}. {r['title']}  [{r['id']}]  ({r['n_steps']} steps, score {r['score']})")
->>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
-        for e in r["evidence"]:
+        for e in r.get("evidence", []):
             lines.append(f"     - {e}")
-    if out["note"]:
+    if out.get("note"):
         lines.append(f"Note: {out['note']}")
     return "\n".join(lines)
+
+__all__ = ["Session", "format_results", "_normalize", "_terms", "HELP_TEXT"]

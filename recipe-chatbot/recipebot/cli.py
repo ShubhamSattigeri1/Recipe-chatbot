@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 """Run: python -m recipebot.cli [--debug] [--no-llm]."""
 import argparse
 
@@ -54,18 +53,6 @@ def main(argv=None):
     print(f"Loaded {len(df):,} recipes | router: {'Gemini ' + gemini.model if gemini and gemini.available else 'rules'}")
     print("Try: 'find a penne pasta recipe', then 'I cannot have dairy'.")
     last_notice_key = None
-=======
-"""Run: python -m recipebot.cli   (type 'reset' to clear restrictions, 'quit' to exit)"""
-from .data import load_recipes
-from .search import SearchIndex
-from .session import Session, format_results
-
-def main():
-    df = load_recipes()
-    print(f"Loaded {len(df):,} recipes.")
-    s = Session(df, SearchIndex.load_or_build(df))
-    print("Ask for a recipe, e.g. 'Find a penne pasta recipe', then 'I cannot have dairy'.")
->>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
     while True:
         try:
             msg = input("\nYou: ").strip()
@@ -74,7 +61,6 @@ def main():
         if msg.lower() in {"quit", "exit"}:
             break
         if msg:
-<<<<<<< HEAD
             out = chat.handle(msg)
             print(out["text"])
             notice = out.get("llm_notice")
@@ -90,9 +76,3 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
-=======
-            print(format_results(s.handle(msg)))
-
-if __name__ == "__main__":
-    main()
->>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd

@@ -1,13 +1,13 @@
 from __future__ import annotations
-import os
+
 import json
-import pandas as pd
+import os
+
 import google.generativeai as genai
-from .substitute import substitute, format_substitution
-<<<<<<< HEAD
+import pandas as pd
+
 from .llm import Gemini
-=======
->>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
+from .substitute import format_substitution, substitute
 
 recipe_tools = [
     {
@@ -50,26 +50,21 @@ recipe_tools = [
     }
 ]
 
+
 class RecipeRouter:
     def __init__(self, df: pd.DataFrame, api_key: str | None = None):
         self.df = df
         self.active_dish: str | None = None
         self.active_includes: list[str] = []
         self.active_excludes: list[str] = []
-        
-<<<<<<< HEAD
+
         config = Gemini(api_key=api_key)
         if not config.available:
             raise ValueError(config.configuration_notice or "Gemini model or API key is unavailable.")
         key = config.key
-=======
-        key = api_key or os.environ.get("GEMINI_API_KEY")
-        if not key:
-            raise ValueError("GEMINI_API_KEY environment variable is not set.")
->>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
-        
+
         genai.configure(api_key=key)
-        
+
         self.tool_implementations = {
             "search_recipes": self._impl_search,
             "analyze_recipes": self._impl_analyze,
@@ -77,11 +72,7 @@ class RecipeRouter:
         }
 
         self.model = genai.GenerativeModel(
-<<<<<<< HEAD
             model_name=config.model,
-=======
-            model_name="gemini-1.5-flash",
->>>>>>> 13df6dde3f08ec0c782e7972ef15bc78752194cd
             tools=recipe_tools,
             system_instruction=(
                 "You are an expert, warm, and conversational culinary assistant backed strictly by a local recipe dataset. "
@@ -94,13 +85,11 @@ class RecipeRouter:
 
     def _impl_search(self, query: str = None, include: list[str] = None, exclude: list[str] = None):
         query_lower = (query or "").lower().strip()
-        
-        # Check if the query is actually an inventory update/follow-up rather than a new dish name
+
         inventory_triggers = ["i also have", "also have", "i have", "i don't have", "dont have", "without", "no "]
         is_inventory_update = any(trigger in query_lower for trigger in inventory_triggers)
-        
+
         if is_inventory_update:
-            # Extract the item being mentioned (e.g., "eggs", "saffron")
             for trig in inventory_triggers:
                 if trig in query_lower:
                     item = query_lower.replace(trig, "").strip()
@@ -113,7 +102,6 @@ class RecipeRouter:
                                 self.active_includes.append(item)
                     break
         else:
-            # It's a genuine new dish search, so update active dish and reset filters
             if query:
                 clean_dish = query.lower().replace("how to make", "").replace("recipe for", "").replace("find", "").replace("show", "").strip()
                 self.active_dish = clean_dish
@@ -124,20 +112,19 @@ class RecipeRouter:
             for inc in include:
                 if inc not in self.active_includes:
                     self.active_includes.append(inc)
-                    
+
         if exclude:
             for exc in exclude:
                 if exc not in self.active_excludes:
                     self.active_excludes.append(exc)
 
-        # Apply filtering on the active dish title + active ingredient constraints
         matched = self.df
         if self.active_dish:
             matched = matched[matched['title'].str.contains(self.active_dish, case=False, na=False)]
-        
+
         for inc in self.active_includes:
             matched = matched[matched['ingredients'].str.contains(inc, case=False, na=False)]
-            
+
         for exc in self.active_excludes:
             matched = matched[~matched['ingredients'].str.contains(exc, case=False, na=False)]
 
@@ -150,7 +137,7 @@ class RecipeRouter:
             if isinstance(ingredients_raw, str):
                 try:
                     ingredients_list = json.loads(ingredients_raw)
-                except:
+                except Exception:
                     ingredients_list = [ingredients_raw]
             else:
                 ingredients_list = list(ingredients_raw)
@@ -162,9 +149,8 @@ class RecipeRouter:
             filter_summary.append(f"including {', '.join(self.active_includes)}")
         if self.active_excludes:
             filter_summary.append(f"excluding {', '.join(self.active_excludes)}")
-        
+
         filter_str = f" ({' | '.join(filter_summary)})" if filter_summary else ""
-        
         target_name = self.active_dish if self.active_dish else "recipes"
         if not out:
             return f"No recipes found for '{target_name}'{filter_str}. Try broadening your search or relaxing restrictions."
